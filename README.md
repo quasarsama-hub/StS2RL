@@ -263,6 +263,8 @@ sts2rl/
   bench.py               combat benchmark on hard fights
   bridge/live.py         real-game play through STS2MCP with a shadow simulator
 tests/                   unit tests + real-game-trace bridge tests
+models/                  trained checkpoint (best.pt) and its held-out evaluation
+results/                 records of the development training run (curve, logs, data)
 ```
 
 ## Credits

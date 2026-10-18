@@ -1,0 +1,36 @@
+[main] starting at iteration 0; best eval score so far -1.000
+[baseline, untrained heuristic] score 0.129  win 0.0% [0.0%,5.7%]  act1:12%  act2:0%  act3:0%  floor 13.2  (64 runs, 2.1s/run)  (36s)
+[iter   0] self-play: score 0.118 win 0.0% floor 12.0 | train: 8154 states, val 0.4640 vs baseline 0.4651 | 50s play, 28s train
+           eval: score 0.143  win 0.0% [0.0%,5.7%]  act1:9%  act2:0%  act3:0%  floor 14.6  (64 runs, 2.3s/run)  << new best
+[iter   1] self-play: score 0.125 win 0.0% floor 12.7 | train: 16545 states, val 0.4741 vs baseline 0.4768 | 62s play, 5s train
+           eval: score 0.178  win 0.0% [0.0%,5.7%]  act1:33%  act2:0%  act3:0%  floor 18.2  (64 runs, 2.4s/run)  << new best
+[iter   2] self-play: score 0.153 win 0.0% floor 15.6 | train: 26484 states, val 0.4596 vs baseline 0.4632 | 60s play, 8s train
+           eval: score 0.178  win 0.0% [0.0%,5.7%]  act1:31%  act2:0%  act3:0%  floor 18.1  (64 runs, 2.2s/run)
+[iter   3] self-play: score 0.160 win 0.0% floor 16.3 | train: 37055 states, val 0.4597 vs baseline 0.4621 | 60s play, 12s train
+           eval: score 0.184  win 0.0% [0.0%,5.7%]  act1:41%  act2:0%  act3:0%  floor 18.7  (64 runs, 2.4s/run)  << new best
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+[main] starting at iteration 5; best eval score so far 0.184
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+[main] starting at iteration 6; best eval score so far 0.184
+[iter   6] self-play: score 0.167 win 0.0% floor 17.0 | train: 70286 states, val 0.4605 vs baseline 0.4643 | 143s play, 118s train
+           eval: score 0.184  win 0.0% [0.0%,5.7%]  act1:38%  act2:0%  act3:0%  floor 18.8  (64 runs, 5.0s/run)  << new best
+[iter   7] self-play: score 0.165 win 0.0% floor 16.8 | train: 81340 states, val 0.4658 vs baseline 0.4727 | 127s play, 78s train
+           eval: score 0.181  win 0.0% [0.0%,5.7%]  act1:31%  act2:0%  act3:0%  floor 18.5  (64 runs, 3.8s/run)
+[iter   8] self-play: score 0.158 win 0.0% floor 16.2 | train: 83988 states, val 0.4556 vs baseline 0.4590 | 92s play, 27s train
+           eval: score 0.193  win 0.0% [0.0%,5.7%]  act1:45%  act2:2%  act3:0%  floor 19.7  (64 runs, 4.1s/run)  << new best
+[iter   9] self-play: score 0.161 win 0.0% floor 16.4 | train: 86593 states, val 0.4625 vs baseline 0.4650 | 91s play, 27s train
+           eval: score 0.182  win 0.0% [0.0%,5.7%]  act1:45%  act2:0%  act3:0%  floor 18.5  (64 runs, 3.9s/run)
+[iter  10] self-play: score 0.165 win 0.0% floor 16.9 | train: 87953 states, val 0.4638 vs baseline 0.4668 | 95s play, 29s train
+           eval: score 0.192  win 0.0% [0.0%,5.7%]  act1:48%  act2:0%  act3:0%  floor 19.6  (64 runs, 4.0s/run)
+[iter  11] self-play: score 0.168 win 0.0% floor 17.1 | train: 88857 states, val 0.4755 vs baseline 0.4785 | 99s play, 28s train
+           eval: score 0.175  win 0.0% [0.0%,5.7%]  act1:34%  act2:0%  act3:0%  floor 17.9  (64 runs, 3.8s/run)
+[iter  12] self-play: score 0.159 win 0.0% floor 16.2 | train: 89145 states, val 0.4672 vs baseline 0.4696 | 90s play, 28s train
+           eval: score 0.181  win 0.0% [0.0%,5.7%]  act1:44%  act2:0%  act3:0%  floor 18.5  (64 runs, 3.9s/run)
+[iter  13] self-play: score 0.159 win 0.0% floor 16.2 | train: 88738 states, val 0.4724 vs baseline 0.4768 | 91s play, 27s train
+           eval: score 0.178  win 0.0% [0.0%,5.7%]  act1:44%  act2:0%  act3:0%  floor 18.2  (64 runs, 3.7s/run)
+[iter  14] self-play: score 0.154 win 0.0% floor 15.7 | train: 88089 states, val 0.4628 vs baseline 0.4657 | 84s play, 28s train
+           eval: score 0.170  win 0.0% [0.0%,5.7%]  act1:31%  act2:0%  act3:0%  floor 17.4  (64 runs, 3.6s/run)
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

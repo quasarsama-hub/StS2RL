@@ -1,0 +1,19 @@
+{
+ "name": "main",
+ "iterations": 300,
+ "runs_per_iter": 200,
+ "eval_runs": 64,
+ "eval_every": 1,
+ "workers": 4,
+ "sims": 24,
+ "eval_sims": 48,
+ "samples": 2,
+ "epsilon": 0.1,
+ "max_act": 3,
+ "lam": 0.9,
+ "epochs": 4,
+ "batch": 512,
+ "lr": 0.001,
+ "replay_iters": 8,
+ "hidden": 256
+}
