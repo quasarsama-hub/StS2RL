@@ -28,6 +28,11 @@ def records_to_arrays(records: list[RunRecord]) -> dict[str, np.ndarray] | None:
     if not states:
         return None
     out = F.Encoded.stack(states).to_dict("x_")
+    # Ids fit in int16 (and flags in int8); the network widens them per batch. This keeps
+    # a replay window of hundreds of thousands of states in a few hundred MB.
+    for key, dtype in (("x_deck", np.int16), ("x_deck_upg", np.int8), ("x_relics", np.int16),
+                       ("x_potions", np.int16), ("x_encounter", np.int16), ("x_boss", np.int16)):
+        out[key] = out[key].astype(dtype)
     out.update(
         run_id=np.array(run_id, np.int64),
         step=np.array(step, np.int64),

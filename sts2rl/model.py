@@ -55,7 +55,7 @@ class ValueNet(nn.Module):
             # random one and only has to learn corrections.
             self.heads.weight.zero_()
             self.heads.bias.zero_()
-        self._prior_idx = [F.SCALAR_NAMES.index(n) for n in ("floor", "hp_frac", "potions_held")]
+        self._prior_idx = {n: F.SCALAR_NAMES.index(n) for n in F.PRIOR_TERMS}
 
     def forward(self, deck, deck_upg, relics, potions, encounter, boss, scalars):
         mask = (deck > 0).unsqueeze(-1).float()
@@ -71,9 +71,10 @@ class ValueNet(nn.Module):
         return out + self.prior_logits(scalars)  # logits: score, win, floor
 
     def prior_logits(self, scalars):
-        """The heuristic the agent starts from: progress so far, plus HP, plus potions."""
-        floor, hp_frac, potions = (scalars[:, i] for i in self._prior_idx)
-        score = (0.5 * floor + 0.15 * hp_frac + 0.03 * potions).clamp(0.01, 0.99)
+        """The heuristic the agent starts from (features.prior_parts)."""
+        floor, hp_frac, potions, nonbasic, upgraded = F.prior_parts(lambda n: scalars[:, self._prior_idx[n]])
+        score = 0.5 * floor + 0.15 * hp_frac + 0.03 * potions + 0.003 * nonbasic.clamp(0, 20) + 0.002 * upgraded.clamp(0, 20)
+        score = score.clamp(0.01, 0.99)
         floor_frac = (floor + 0.1 * hp_frac).clamp(0.01, 0.99)
         win = torch.full_like(score, 0.01)
         return torch.logit(torch.stack([score, win, floor_frac], dim=1))
@@ -82,14 +83,17 @@ class ValueNet(nn.Module):
 
     @staticmethod
     def tensors(batch: F.Encoded, device="cpu"):
+        def ids(a):
+            return torch.as_tensor(a, device=device).long()
+
         return (
-            torch.as_tensor(batch.deck, device=device),
-            torch.as_tensor(batch.deck_upg, device=device),
-            torch.as_tensor(batch.relics, device=device),
-            torch.as_tensor(batch.potions, device=device),
-            torch.as_tensor(batch.encounter, device=device),
-            torch.as_tensor(batch.boss, device=device),
-            torch.as_tensor(batch.scalars, device=device),
+            ids(batch.deck),
+            ids(batch.deck_upg),
+            ids(batch.relics),
+            ids(batch.potions),
+            ids(batch.encounter),
+            ids(batch.boss),
+            torch.as_tensor(batch.scalars, device=device, dtype=torch.float32),
         )
 
     @torch.no_grad()

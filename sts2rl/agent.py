@@ -26,6 +26,7 @@ from .model import ValueNet
 
 STOCHASTIC_PHASES = {sim.PHASE_MAP, sim.PHASE_EVENT, sim.PHASE_ANCIENT, 10, 11}
 PHASE_BUNDLE_SELECT = 12
+REWARD_SKIP = 3
 BUNDLE_CONFIRM = 2
 MAX_OPTIONS = 64
 MAX_RUN_STEPS = 8000
@@ -59,13 +60,11 @@ class RunRecord:
     combats: int = 0
 
 
-def heuristic_value(run: sim.Run, max_act: int = 3) -> float:
-    """Value before any learning: progress, plus HP, plus a little for potions."""
+def heuristic_value(run: sim.Run, max_act: int = 3, maps: F.MapCache | None = None) -> float:
+    """Value before any learning -- exactly what an untrained network predicts."""
     if run.done:
         return sim.run_score(run, max_act)
-    progress = 0.5 * min(run.floor, sim.FLOORS_PER_ACT * max_act) / (sim.FLOORS_PER_ACT * max_act)
-    hp = run.combat_hp if run.phase == sim.PHASE_COMBAT else run.hp
-    return progress + 0.15 * hp / max(1, run.max_hp) + 0.01 * sum(1 for p in run.potions() if p)
+    return float(F.prior_score_np(F.encode(run, maps or F.MapCache()).scalars)[0])
 
 
 class Agent:
@@ -92,7 +91,7 @@ class Agent:
         if live:
             if self.model is None:
                 for i in live:
-                    out[i] = heuristic_value(runs[i], self.cfg.max_act)
+                    out[i] = heuristic_value(runs[i], self.cfg.max_act, self.maps)
             else:
                 t = time.perf_counter()
                 batch = F.Encoded.stack([F.encode(runs[i], self.maps) for i in live])
@@ -180,6 +179,13 @@ class Agent:
             return options[0]
         if run.phase == PHASE_BUNDLE_SELECT:
             return self._bundle_move(run, options)
+        if run.phase == sim.PHASE_RELIC_REWARD:
+            # Gold, potions and relics are claimed, as the live bridge does; whether to
+            # take a CARD is decided on the card-reward screen this opens. Leaving here
+            # forfeits everything on the screen, card reward included.
+            claims = [a for a in options if a < REWARD_SKIP]
+            if claims:
+                return claims[0]
         if self.cfg.epsilon > 0 and self.rng.random() < self.cfg.epsilon:
             return self.rng.choice(options)
         if len(options) > MAX_OPTIONS:

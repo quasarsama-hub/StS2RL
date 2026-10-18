@@ -31,7 +31,7 @@ def _scalar_names() -> list[str]:
     names = [
         "hp_frac", "hp", "max_hp", "gold", "floor", "floor_in_act", "act1", "act2", "act3",
         "region_overgrowth", "region_underdocks", "region_hive", "region_glory",
-        "deck_size", "upgraded_frac", "avg_cost", "total_damage", "total_block",
+        "deck_size", "upgraded_frac", "avg_cost", "total_damage", "total_block", "basic_cards",
         "potions_held", "relics_held",
     ]
     names += [f"type_{t}" for t in gd.CARD_TYPES]
@@ -167,15 +167,17 @@ def _card_arrays():
     blk = np.zeros(n, np.float32)
     ctype = np.zeros(n, np.int64)
     flags = np.zeros((n, 4), np.float32)
+    basic = np.zeros(n, np.float32)
     for cid, card in cards.items():
         i = vocab(cid)
+        basic[i] = 1.0 if card.rarity == "Basic" else 0.0
         cost[i] = max(card.cost, 0)
         dmg[i] = card.damage
         blk[i] = card.block
         ctype[i] = CARD_TYPE_INDEX.get(card.type, 1)
         for j, f in enumerate(("Exhaust", "Ethereal", "Unplayable", "HasEnergyCostX")):
             flags[i, j] = 1.0 if f in card.flags else 0.0
-    return cost, dmg, blk, ctype, flags
+    return cost, dmg, blk, ctype, flags, basic
 
 
 def encode(run: sim.Run, maps: MapCache, *, hp: int | None = None, potions: tuple | None = None, phase: int | None = None, in_combat: bool | None = None) -> Encoded:
@@ -217,7 +219,7 @@ def encode(run: sim.Run, maps: MapCache, *, hp: int | None = None, potions: tupl
     if region:
         v[_S[f"region_{region}"]] = 1.0
 
-    cost, dmg, blk, ctype, flags = _card_arrays()
+    cost, dmg, blk, ctype, flags, basic = _card_arrays()
     idx = deck_ids[0, : len(deck)]
     n = max(1, len(deck))
     v[_S["deck_size"]] = len(deck) / 40.0
@@ -225,6 +227,7 @@ def encode(run: sim.Run, maps: MapCache, *, hp: int | None = None, potions: tupl
     v[_S["avg_cost"]] = cost[idx].mean() if len(idx) else 0.0
     v[_S["total_damage"]] = dmg[idx].sum() / 100.0
     v[_S["total_block"]] = blk[idx].sum() / 100.0
+    v[_S["basic_cards"]] = basic[idx].sum() / 20.0 if len(idx) else 0.0
     v[_S["potions_held"]] = sum(1 for p in pots if p) / 3.0
     v[_S["relics_held"]] = len(relics) / 10.0
     if len(idx):
@@ -289,3 +292,30 @@ def with_hp_and_potions(base: Encoded, hps: np.ndarray, max_hp: int, potion_sets
             out.scalars[k, _S["potions_held"]] = held
             k += 1
     return out
+
+
+# --------------------------------------------------------------------------------------
+# the hand-written prior the value network is residual on
+
+
+PRIOR_TERMS = ("floor", "hp_frac", "potions_held", "type_Attack", "type_Skill", "type_Power", "basic_cards", "upgraded_frac", "deck_size")
+
+
+def prior_parts(get):
+    """Shared by the numpy heuristic and the network (pass a column getter for either).
+
+    Progress so far, HP, potions -- plus a little for every non-basic card and every
+    upgrade, so that an untrained agent takes cards and smiths rather than skipping by
+    coin flip. The network learns everything this gets wrong.
+    """
+    floor, hp_frac, potions = get("floor"), get("hp_frac"), get("potions_held")
+    playable = 20.0 * (get("type_Attack") + get("type_Skill") + get("type_Power"))
+    nonbasic = playable - 20.0 * get("basic_cards")
+    upgraded = get("upgraded_frac") * 40.0 * get("deck_size")
+    return floor, hp_frac, potions, nonbasic, upgraded
+
+
+def prior_score_np(scalars: np.ndarray) -> np.ndarray:
+    floor, hp_frac, potions, nonbasic, upgraded = prior_parts(lambda n: scalars[:, _S[n]])
+    score = 0.5 * floor + 0.15 * hp_frac + 0.03 * potions + 0.003 * np.clip(nonbasic, 0, 20) + 0.002 * np.clip(upgraded, 0, 20)
+    return np.clip(score, 0.01, 0.99)

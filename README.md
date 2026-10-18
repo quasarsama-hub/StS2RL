@@ -39,9 +39,12 @@ estimate for "this HP, these potions left" — so the search knows when spending
 HP is worth it for the run, not just for this fight.
 
 **It starts from a sensible prior and learns corrections.** The network is residual on a
-hand-written heuristic (progress + HP + potions) with zero-initialised output, so
-iteration 0 plays like the heuristic agent instead of randomly, and training only has to
-learn what the heuristic gets wrong — e.g. which cards are worth taking.
+hand-written heuristic (progress, HP, potions, a little per non-basic card and per
+upgrade) with zero-initialised output, so iteration 0 plays like the heuristic agent
+instead of randomly, and training only has to learn what the heuristic gets wrong — which
+cards are worth taking, which path to walk, when an elite is worth the HP. (Without this,
+an untrained network's near-random preferences made it skip card rewards by coin flip
+and play worse than the heuristic it was supposed to improve on.)
 
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
@@ -113,6 +116,7 @@ Knobs that matter most:
 ### Evaluate, watch, benchmark
 
 ```bash
+python -m sts2rl.report   runs/main                                     # learning curve
 python -m sts2rl.evaluate --model runs/main/best.pt --runs 200 --sims 128
 python -m sts2rl.watch    --model runs/main/best.pt --seed ANYSEED     # see its reasoning
 python -m sts2rl.bench    --sims 0,32,100                               # combat-only benchmark
@@ -129,6 +133,17 @@ same ascension, so the two stay in lockstep. The agent decides on the shadow exa
 it does in training and the bridge sends the game the matching command. After every
 step it compares the game with the shadow — floor, HP, gold, hand, enemy HP — and
 **stops the moment they disagree**, because a diverged simulator would mislead the agent.
+
+**On Windows:** run everything (training and the bridge) inside WSL2 (Ubuntu), and let WSL
+reach the game's `localhost:15526` by enabling mirrored networking — put this in
+`%UserProfile%\.wslconfig`, then run `wsl --shutdown` once:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+Check with `curl -s http://localhost:15526/` from the WSL shell while the game is running.
 
 1. Install STS2MCP into the game's `mods/` folder and enable mods. To let the bridge start
    *seeded* runs itself, use a fork with custom-run support
@@ -188,6 +203,7 @@ sts2rl/
   dataset.py             replay buffer + TD(lambda) targets
   train.py               the improvement loop
   evaluate.py            fixed-seed evaluation with confidence intervals
+  report.py              learning curve from a training run
   watch.py               narrated single run
   bench.py               combat benchmark on hard fights
   bridge/live.py         real-game play through STS2MCP with a shadow simulator
