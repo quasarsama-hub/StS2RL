@@ -1,0 +1,75 @@
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 84c6f00..b34c4f4 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -18,6 +18,7 @@ public sealed class RunEngine
+         State.PlayerMaxHp = 80;
+         State.Gold = 99;
+         State.Floor = 1;
++        State.ActStartFloor = 0;
+         State.Phase = RunPhase.Ancient;
+         State.Deck = [];
+         foreach (int cardId in RunConstants.StarterDeckIds)
+@@ -1505,6 +1506,15 @@ public sealed class RunEngine
+             {
+                 State.NeowOptions[i] = options[i];
+             }
++
++            // An ancient with no option generator yet (Act 3's Nonupeipe, Tanx and Vakuu)
++            // offered no move at all, which stranded every run that reached Act 3. Go
++            // straight to the Proceed page instead: the run skips a blessing the game
++            // would give, so the emulator errs harder than the game, never easier.
++            if (options.Length == 0)
++            {
++                State.NeowAwaitingProceed = true;
++            }
+         }
+ 
+         State.Phase = RunPhase.Ancient;
+@@ -2272,6 +2282,8 @@ public sealed class RunEngine
+             return false;
+         }
+ 
++        State.ActStartFloor = State.Floor;
++
+         RunRewardGenerator.ClearRewardScreen(State);
+         // Through EnterMapPhase, not by setting the phase: the options have to be
+         // refreshed too, and on a new act the only one is the act's starting ancient.
+@@ -2289,7 +2301,7 @@ public sealed class RunEngine
+         // taller, and a constant here cut its last room off.
+         int bossRow = RunMapGenerator.BossRow(State);
+         int terminalFloor = State.Act == RunConstants.ActUnderdocks ? bossRow * 2 + 1 : bossRow + 1;
+-        if (State.Floor >= terminalFloor)
++        if (State.Floor - State.ActStartFloor >= terminalFloor)
+         {
+             State.Phase = RunPhase.Complete;
+             terminal = true;
+diff --git a/src/Sts2Emulator/Core/Run/RunState.cs b/src/Sts2Emulator/Core/Run/RunState.cs
+index 87869a7..2c025d8 100644
+--- a/src/Sts2Emulator/Core/Run/RunState.cs
++++ b/src/Sts2Emulator/Core/Run/RunState.cs
+@@ -138,6 +138,12 @@ public sealed class RunState
+     public int PlayerMaxHp;
+     public int Gold;
+     public int Floor;
++
++    /// <summary>
++    /// <see cref="Floor"/> as it stood when the current act began (0 in act 1). Floor is
++    /// cumulative across acts, as in the game, so per-act arithmetic subtracts this.
++    /// </summary>
++    public int ActStartFloor;
+     public RunPhase Phase;
+     public List<CardInstance> Deck = [];
+     public List<RelicInstance> Relics = [];
+diff --git a/src/Sts2Emulator/Core/StateCloning.cs b/src/Sts2Emulator/Core/StateCloning.cs
+index bcd81ce..c5c348d 100644
+--- a/src/Sts2Emulator/Core/StateCloning.cs
++++ b/src/Sts2Emulator/Core/StateCloning.cs
+@@ -333,6 +333,7 @@ public static class StateCloning
+             PlayerMaxHp = state.PlayerMaxHp,
+             Gold = state.Gold,
+             Floor = state.Floor,
++            ActStartFloor = state.ActStartFloor,
+             Phase = state.Phase,
+             Deck = [.. state.Deck],
+             Relics = [.. state.Relics],

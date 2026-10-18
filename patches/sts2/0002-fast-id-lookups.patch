@@ -1,0 +1,293 @@
+diff --git a/scripts/extract_data.py b/scripts/extract_data.py
+index 1db17dd..dad0fd6 100755
+--- a/scripts/extract_data.py
++++ b/scripts/extract_data.py
+@@ -438,8 +438,23 @@ internal static class Cards
+     /// <summary>Every card, for callers that need to ask a question of the whole set.</summary>
+     public static ReadOnlySpan<CardDef> All => _all;
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, CardDef> _byId = BuildById();
++
++    private static Dictionary<int, CardDef> BuildById()
++    {{
++        var byId = new Dictionary<int, CardDef>(_all.Length);
++        foreach (var def in _all)
++        {{
++            byId.TryAdd(def.Id, def);
++        }}
++
++        return byId;
++    }}
++
+     public static CardDef Get(int id) =>
+-        Array.Find(_all, c => c.Id == id) is {{ Id: not 0 }} def
++        _byId.TryGetValue(id, out var def) && def.Id is not 0
+             ? def
+             : throw new ArgumentException($"Unknown card id {{id}}");
+ 
+@@ -530,8 +545,23 @@ internal static class Enemies
+ {lines}
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, EnemyDef> _byId = BuildById();
++
++    private static Dictionary<int, EnemyDef> BuildById()
++    {{
++        var byId = new Dictionary<int, EnemyDef>(_all.Length);
++        foreach (var def in _all)
++        {{
++            byId.TryAdd(def.Id, def);
++        }}
++
++        return byId;
++    }}
++
+     public static EnemyDef Get(int id) =>
+-        Array.Find(_all, e => e.Id == id) is {{ Id: > 0 }} def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown enemy id {{id}}");
+ 
+@@ -595,8 +625,23 @@ internal static class Powers
+ {lines}
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, PowerDef> _byId = BuildById();
++
++    private static Dictionary<int, PowerDef> BuildById()
++    {{
++        var byId = new Dictionary<int, PowerDef>(_all.Length);
++        foreach (var def in _all)
++        {{
++            byId.TryAdd(def.Id, def);
++        }}
++
++        return byId;
++    }}
++
+     public static PowerDef Get(int id) =>
+-        Array.Find(_all, p => p.Id == id) is {{ Id: > 0 }} def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown power id {{id}}");
+ 
+@@ -669,8 +714,23 @@ internal static class Relics
+     /// <summary>Every relic, for audits and for tests that assert over the whole set.</summary>
+     public static ReadOnlySpan<RelicDef> All => _all;
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, RelicDef> _byId = BuildById();
++
++    private static Dictionary<int, RelicDef> BuildById()
++    {{
++        var byId = new Dictionary<int, RelicDef>(_all.Length);
++        foreach (var def in _all)
++        {{
++            byId.TryAdd(def.Id, def);
++        }}
++
++        return byId;
++    }}
++
+     public static RelicDef Get(int id) =>
+-        Array.Find(_all, r => r.Id == id) is {{ Id: > 0 }} def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown relic id {{id}}");
+ 
+@@ -682,8 +742,7 @@ internal static class Relics
+     /// <summary>Lookup that does not throw, for ids that may not name a relic at all.</summary>
+     public static bool TryGet(int id, out RelicDef def)
+     {{
+-        def = Array.Find(_all, r => r.Id == id);
+-        return def.Id > 0;
++        return _byId.TryGetValue(id, out def) && def.Id > 0;
+     }}
+ }}
+ """
+@@ -743,8 +802,23 @@ internal static class Potions
+ {lines}
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, PotionDef> _byId = BuildById();
++
++    private static Dictionary<int, PotionDef> BuildById()
++    {{
++        var byId = new Dictionary<int, PotionDef>(_all.Length);
++        foreach (var def in _all)
++        {{
++            byId.TryAdd(def.Id, def);
++        }}
++
++        return byId;
++    }}
++
+     public static PotionDef Get(int id) =>
+-        Array.Find(_all, p => p.Id == id) is {{ Id: > 0 }} def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown potion id {{id}}");
+ 
+diff --git a/src/Sts2Emulator/Generated/Cards.g.cs b/src/Sts2Emulator/Generated/Cards.g.cs
+index c0063f3..8b6f248 100644
+--- a/src/Sts2Emulator/Generated/Cards.g.cs
++++ b/src/Sts2Emulator/Generated/Cards.g.cs
+@@ -588,8 +588,23 @@ internal static class Cards
+     /// <summary>Every card, for callers that need to ask a question of the whole set.</summary>
+     public static ReadOnlySpan<CardDef> All => _all;
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, CardDef> _byId = BuildById();
++
++    private static Dictionary<int, CardDef> BuildById()
++    {
++        var byId = new Dictionary<int, CardDef>(_all.Length);
++        foreach (var def in _all)
++        {
++            byId.TryAdd(def.Id, def);
++        }
++
++        return byId;
++    }
++
+     public static CardDef Get(int id) =>
+-        Array.Find(_all, c => c.Id == id) is { Id: not 0 } def
++        _byId.TryGetValue(id, out var def) && def.Id is not 0
+             ? def
+             : throw new ArgumentException($"Unknown card id {id}");
+ 
+diff --git a/src/Sts2Emulator/Generated/Enemies.g.cs b/src/Sts2Emulator/Generated/Enemies.g.cs
+index 3a7cef4..eaa8fce 100644
+--- a/src/Sts2Emulator/Generated/Enemies.g.cs
++++ b/src/Sts2Emulator/Generated/Enemies.g.cs
+@@ -119,8 +119,23 @@ internal static class Enemies
+         new EnemyDef(Id: 106, Name: "Zapbot", MinHp: 19, MaxHp: 24, MinHpBelowToughEnemies: 18, MaxHpBelowToughEnemies: 23, Moves: Array.Empty<int>()),
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, EnemyDef> _byId = BuildById();
++
++    private static Dictionary<int, EnemyDef> BuildById()
++    {
++        var byId = new Dictionary<int, EnemyDef>(_all.Length);
++        foreach (var def in _all)
++        {
++            byId.TryAdd(def.Id, def);
++        }
++
++        return byId;
++    }
++
+     public static EnemyDef Get(int id) =>
+-        Array.Find(_all, e => e.Id == id) is { Id: > 0 } def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown enemy id {id}");
+ 
+diff --git a/src/Sts2Emulator/Generated/Potions.g.cs b/src/Sts2Emulator/Generated/Potions.g.cs
+index 816b7ee..92ebe9a 100644
+--- a/src/Sts2Emulator/Generated/Potions.g.cs
++++ b/src/Sts2Emulator/Generated/Potions.g.cs
+@@ -71,8 +71,23 @@ internal static class Potions
+         new PotionDef(Id: 63, Name: "WeakPotion", Rarity: PotionRarity.Common),
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, PotionDef> _byId = BuildById();
++
++    private static Dictionary<int, PotionDef> BuildById()
++    {
++        var byId = new Dictionary<int, PotionDef>(_all.Length);
++        foreach (var def in _all)
++        {
++            byId.TryAdd(def.Id, def);
++        }
++
++        return byId;
++    }
++
+     public static PotionDef Get(int id) =>
+-        Array.Find(_all, p => p.Id == id) is { Id: > 0 } def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown potion id {id}");
+ 
+diff --git a/src/Sts2Emulator/Generated/Powers.g.cs b/src/Sts2Emulator/Generated/Powers.g.cs
+index 5a4f1e4..d754baa 100644
+--- a/src/Sts2Emulator/Generated/Powers.g.cs
++++ b/src/Sts2Emulator/Generated/Powers.g.cs
+@@ -250,8 +250,23 @@ internal static class Powers
+         new PowerDef(Id: 242, Name: "WraithFormPower", IsBuff: false, StackType: "Counter", TicksDown: false),
+     ];
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, PowerDef> _byId = BuildById();
++
++    private static Dictionary<int, PowerDef> BuildById()
++    {
++        var byId = new Dictionary<int, PowerDef>(_all.Length);
++        foreach (var def in _all)
++        {
++            byId.TryAdd(def.Id, def);
++        }
++
++        return byId;
++    }
++
+     public static PowerDef Get(int id) =>
+-        Array.Find(_all, p => p.Id == id) is { Id: > 0 } def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown power id {id}");
+ 
+diff --git a/src/Sts2Emulator/Generated/Relics.g.cs b/src/Sts2Emulator/Generated/Relics.g.cs
+index 49c114c..56a31eb 100644
+--- a/src/Sts2Emulator/Generated/Relics.g.cs
++++ b/src/Sts2Emulator/Generated/Relics.g.cs
+@@ -307,8 +307,23 @@ internal static class Relics
+     /// <summary>Every relic, for audits and for tests that assert over the whole set.</summary>
+     public static ReadOnlySpan<RelicDef> All => _all;
+ 
++    // O(1) id lookup. `Array.Find` was a linear scan on every call, and `Get` sits on
++    // the hot path of every combat step; first occurrence wins, as Find's did.
++    private static readonly Dictionary<int, RelicDef> _byId = BuildById();
++
++    private static Dictionary<int, RelicDef> BuildById()
++    {
++        var byId = new Dictionary<int, RelicDef>(_all.Length);
++        foreach (var def in _all)
++        {
++            byId.TryAdd(def.Id, def);
++        }
++
++        return byId;
++    }
++
+     public static RelicDef Get(int id) =>
+-        Array.Find(_all, r => r.Id == id) is { Id: > 0 } def
++        _byId.TryGetValue(id, out var def) && def.Id is > 0
+             ? def
+             : throw new ArgumentException($"Unknown relic id {id}");
+ 
+@@ -320,7 +335,6 @@ internal static class Relics
+     /// <summary>Lookup that does not throw, for ids that may not name a relic at all.</summary>
+     public static bool TryGet(int id, out RelicDef def)
+     {
+-        def = Array.Find(_all, r => r.Id == id);
+-        return def.Id > 0;
++        return _byId.TryGetValue(id, out def) && def.Id > 0;
+     }
+ }

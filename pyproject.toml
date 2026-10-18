@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sts2rl"
+version = "0.1.0"
+description = "Self-improving Slay the Spire 2 agent: combat search + learned run value, trained in a headless simulator."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "gymnasium>=1.0",
+    "torch>=2.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["sts2rl", "sts2rl.bridge"]

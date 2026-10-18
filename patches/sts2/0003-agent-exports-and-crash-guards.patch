@@ -1,0 +1,346 @@
+diff --git a/src/Sts2Emulator/Interop/AgentExports.cs b/src/Sts2Emulator/Interop/AgentExports.cs
+new file mode 100644
+index 0000000..cc46c2e
+--- /dev/null
++++ b/src/Sts2Emulator/Interop/AgentExports.cs
+@@ -0,0 +1,295 @@
++using System.Runtime.InteropServices;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++
++namespace Sts2Emulator.Interop;
++
++/// <summary>
++/// Exports for search-based agents (sts2rl). Nothing here changes game rules: it drives
++/// the same <see cref="RunEngine.Step"/> a caller would, just without a round trip to the
++/// caller for every action, which is what made rollouts the cost of a search.
++/// </summary>
++public static class AgentExports
++{
++    /// <summary>Weights the rollout policy reads; see <see cref="RolloutCombat"/>.</summary>
++    public const int RolloutWeightCount = 8;
++
++    /// <summary>Status returned when the engine threw; the state may be inconsistent.</summary>
++    public const int EngineErrorStatus = -3;
++
++    [ThreadStatic]
++    private static string? _lastError;
++
++    internal static void RecordError(Exception ex) =>
++        _lastError = $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
++
++    /// <summary>Copy the last engine error (UTF-8) into buf; returns the byte count.</summary>
++    [UnmanagedCallersOnly(EntryPoint = "Sts2Agent_LastError")]
++    public static unsafe int LastError(byte* buf, int len)
++    {
++        var bytes = System.Text.Encoding.UTF8.GetBytes(_lastError ?? "");
++        int n = Math.Min(bytes.Length, len);
++        bytes.AsSpan(0, n).CopyTo(new Span<byte>(buf, len));
++        return n;
++    }
++
++    /// <summary>
++    /// Play the current combat forward with a cheap heuristic policy until it ends, or
++    /// until <paramref name="maxEndTurns"/> turns have been ended (0 = no limit), or
++    /// <paramref name="maxSteps"/> actions have been taken.
++    /// </summary>
++    /// <remarks>
++    /// Policy: sample an action with probability proportional to a weight chosen by what
++    /// the action is -- an Attack, a Skill while the incoming damage exceeds current Block,
++    /// a Skill while it does not, a Power, ending the turn, anything else, a potion. Those
++    /// are <c>weights[0..6]</c>. <c>weights[7]</c> is the probability an enemy-targeted
++    /// card aims at the lowest-HP targetable enemy rather than a uniformly random one.
++    /// Card-selection screens are answered uniformly at random.
++    ///
++    /// Run this only on a clone made with resampling: a faithful copy plays out the real
++    /// draw order and enemy rolls.
++    /// </remarks>
++    /// <c>info</c> receives four numbers: the enemies' summed HP and summed max HP as last
++    /// seen while the fight was still on, the actions taken, and the turns ended -- so a
++    /// lost playout can still say how close it came.
++    /// <returns>The number of actions taken, or -1 for an unknown handle.</returns>
++    [UnmanagedCallersOnly(EntryPoint = "Sts2Agent_RolloutCombat")]
++    public static unsafe int RolloutCombat(
++        int handle,
++        int seed,
++        int maxSteps,
++        int maxEndTurns,
++        float* weights,
++        int* obsBuf,
++        int* info
++    )
++    {
++        if (!RunNativeExports.TryGet(handle, out var run))
++        {
++            return -1;
++        }
++
++        try
++        {
++            return Rollout(run, seed, maxSteps, maxEndTurns, weights, obsBuf, info);
++        }
++        catch (Exception ex)
++        {
++            RecordError(ex);
++            return EngineErrorStatus;
++        }
++    }
++
++    private static unsafe int Rollout(
++        RunEngine run,
++        int seed,
++        int maxSteps,
++        int maxEndTurns,
++        float* weights,
++        int* obsBuf,
++        int* info
++    )
++    {
++        var w = new ReadOnlySpan<float>(weights, RolloutWeightCount);
++        var rng = new Random(seed);
++        int steps = 0;
++        int endTurns = 0;
++        Span<float> scores = stackalloc float[RunConstants.MaxActions];
++        if (run.State.ActiveCombat is { } start)
++        {
++            RecordEnemyHp(start, info);
++        }
++
++        while (
++            steps < maxSteps
++            && run.State.Phase == RunPhase.Combat
++            && run.State.ActiveCombat is { } combat
++        )
++        {
++            int[] valid = CombatEngine.ValidActions(combat);
++            if (valid.Length == 0)
++            {
++                break;
++            }
++
++            int action;
++            int target = -1;
++            bool endsTurn = false;
++            if (combat.PendingSelection is not null)
++            {
++                action = valid[rng.Next(valid.Length)];
++            }
++            else
++            {
++                int endTurn = combat.Hand.Count;
++                bool threatened = IncomingDamage(combat) > combat.PlayerBlock;
++                float total = 0f;
++                for (int i = 0; i < valid.Length; i++)
++                {
++                    int a = valid[i];
++                    float score;
++                    if (a < endTurn)
++                    {
++                        score = GeneratedData.Cards.Get(combat.Hand[a].DefId).Type switch
++                        {
++                            CardType.Attack => w[0],
++                            CardType.Skill => threatened ? w[1] : w[2],
++                            CardType.Power => w[3],
++                            _ => w[5],
++                        };
++                    }
++                    else if (a == endTurn)
++                    {
++                        score = w[4];
++                    }
++                    else
++                    {
++                        score = w[6];
++                    }
++
++                    scores[i] = score;
++                    total += score;
++                }
++
++                action = valid[^1];
++                if (total > 0f)
++                {
++                    float pick = (float)rng.NextDouble() * total;
++                    for (int i = 0; i < valid.Length; i++)
++                    {
++                        pick -= scores[i];
++                        if (pick <= 0f && scores[i] > 0f)
++                        {
++                            action = valid[i];
++                            break;
++                        }
++                    }
++                }
++                else
++                {
++                    action = endTurn;
++                }
++
++                endsTurn = action == endTurn;
++                bool aimed =
++                    action > endTurn
++                    || (
++                        action < endTurn
++                        && GeneratedData.Cards.Get(combat.Hand[action].DefId).Target
++                            == CardTarget.AnyEnemy
++                    );
++                if (aimed)
++                {
++                    target = PickTarget(combat, rng, w[7]);
++                }
++            }
++
++            int status = run.Step(action, target, out _, out _, out _);
++            steps++;
++            if (run.State.Phase == RunPhase.Combat && run.State.ActiveCombat is { } after)
++            {
++                RecordEnemyHp(after, info);
++            }
++            else if (run.State.PlayerHp > 0)
++            {
++                info[0] = 0;
++            }
++
++            if (status != 0)
++            {
++                // A refused move must not spin the loop: end the turn instead, which is
++                // always legal outside a selection screen.
++                if (combat.PendingSelection is not null || action == combat.Hand.Count)
++                {
++                    break;
++                }
++
++                run.Step(combat.Hand.Count, -1, out _, out _, out _);
++                endsTurn = true;
++            }
++
++            if (endsTurn)
++            {
++                endTurns++;
++                if (maxEndTurns > 0 && endTurns >= maxEndTurns)
++                {
++                    break;
++                }
++            }
++        }
++
++        run.WriteObservation(new Span<int>(obsBuf, RunConstants.RunObsSize));
++        info[2] = steps;
++        info[3] = endTurns;
++        return steps;
++    }
++
++    private static unsafe void RecordEnemyHp(CombatState combat, int* info)
++    {
++        int hp = 0;
++        int maxHp = 0;
++        foreach (var enemy in combat.Enemies)
++        {
++            hp += Math.Max(0, enemy.Hp);
++            maxHp += enemy.MaxHp;
++        }
++
++        info[0] = hp;
++        info[1] = maxHp;
++    }
++
++    private static int IncomingDamage(CombatState combat)
++    {
++        float weakDelta = Core.Effects.RelicEffects.WeakMultiplierDeltaAgainstPlayer(combat);
++        int total = 0;
++        foreach (var enemy in combat.Enemies)
++        {
++            if (enemy.Hp > 0)
++            {
++                var intent = enemy.CurrentIntent;
++                if (intent.Type == IntentType.Attack || intent.CarriesDamage)
++                {
++                    total += intent.AnnouncedDamage(enemy.Buffs, combat.PlayerBuffs, weakDelta);
++                }
++            }
++        }
++
++        return total;
++    }
++
++    private static int PickTarget(CombatState combat, Random rng, float focusProbability)
++    {
++        int count = 0;
++        int lowest = -1;
++        for (int i = 0; i < combat.Enemies.Count; i++)
++        {
++            var enemy = combat.Enemies[i];
++            if (!EnemyAI.IsTargetable(enemy))
++            {
++                continue;
++            }
++
++            count++;
++            if (lowest < 0 || enemy.Hp < combat.Enemies[lowest].Hp)
++            {
++                lowest = i;
++            }
++        }
++
++        if (count <= 1 || rng.NextDouble() < focusProbability)
++        {
++            return lowest;
++        }
++
++        int pick = rng.Next(count);
++        for (int i = 0; i < combat.Enemies.Count; i++)
++        {
++            if (EnemyAI.IsTargetable(combat.Enemies[i]) && pick-- == 0)
++            {
++                return i;
++            }
++        }
++
++        return lowest;
++    }
++}
+diff --git a/src/Sts2Emulator/Interop/RunNativeExports.cs b/src/Sts2Emulator/Interop/RunNativeExports.cs
+index 7a127ef..23c016c 100644
+--- a/src/Sts2Emulator/Interop/RunNativeExports.cs
++++ b/src/Sts2Emulator/Interop/RunNativeExports.cs
+@@ -145,13 +145,24 @@ public static class RunNativeExports
+             return -1;
+         }
+ 
+-        int status = run.Step(
+-            action,
+-            targetEnemyIndex,
+-            out float reward,
+-            out bool terminal,
+-            out bool truncated
+-        );
++        int status;
++        float reward;
++        bool terminal;
++        bool truncated;
++        try
++        {
++            status = run.Step(action, targetEnemyIndex, out reward, out terminal, out truncated);
++        }
++        catch (Exception ex)
++        {
++            // An unhandled exception aborts the whole host process under NativeAOT. Report
++            // it instead; the caller treats this run as broken (see AgentExports.LastError).
++            AgentExports.RecordError(ex);
++            reward = 0f;
++            terminal = false;
++            truncated = false;
++            status = AgentExports.EngineErrorStatus;
++        }
+         run.WriteObservation(new Span<int>(obsBuf, RunConstants.RunObsSize));
+         *rewardOut = reward;
+         *terminalOut = terminal ? 1 : 0;
+@@ -554,7 +565,7 @@ public static class RunNativeExports
+         return values.Length;
+     }
+ 
+-    private static bool TryGet(
++    internal static bool TryGet(
+         int handle,
+         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out RunEngine? run
+     )

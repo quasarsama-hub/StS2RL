@@ -1,0 +1,48 @@
+diff --git a/src/Sts2Emulator/Core/CombatEngine.cs b/src/Sts2Emulator/Core/CombatEngine.cs
+index 063b274..f3308c6 100644
+--- a/src/Sts2Emulator/Core/CombatEngine.cs
++++ b/src/Sts2Emulator/Core/CombatEngine.cs
+@@ -871,7 +871,11 @@ public static class CombatEngine
+         // whatever is left by the time the loop reaches it.
+         int handAtTurnEnd = state.Hand.Count;
+         var nextHand = new List<CardInstance>();
+-        foreach (var card in state.Hand)
++        // Iterate a SNAPSHOT: an end-of-turn exhaust can put a card into the hand mid-flush
++        // (Dark Embrace draws when an Ethereal card burns off), and enumerating the live
++        // list threw "Collection was modified" and killed the process.
++        var flushed = state.Hand.ToList();
++        foreach (var card in flushed)
+         {
+             var def = GeneratedData.Cards.Get(card.DefId);
+             // Three cards drop Ethereal when upgraded, not one: this was `def.Id == 159`,
+@@ -941,6 +945,30 @@ public static class CombatEngine
+                 );
+             }
+         }
++        // Whatever arrived in the hand DURING the flush goes out with it rather than
++        // vanishing when the hand is cleared below.
++        var arrived = new List<CardInstance>(state.Hand);
++        foreach (var card in flushed)
++        {
++            int at = arrived.IndexOf(card);
++            if (at >= 0)
++            {
++                arrived.RemoveAt(at);
++            }
++        }
++
++        foreach (var card in arrived)
++        {
++            state.DiscardPile.Add(
++                card with
++                {
++                    FreeThisTurn = false,
++                    SlyThisTurn = false,
++                    CostThisTurn = int.MinValue,
++                }
++            );
++        }
++
+         state.Hand.Clear();
+         state.Hand.AddRange(nextHand);
+         // `Hook.AfterFlush(cardsToFlush, cardsToRetain)`, dispatched once after the whole
