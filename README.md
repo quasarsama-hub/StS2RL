@@ -71,25 +71,30 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with all six simulator patches (`results/dev-run/final-eval-patch0006/`):
+with all six simulator patches, and with the agent unable to walk away from an event (a
+move the simulator allows and the game does not; see the sts2-cli section)
+(`results/dev-run/final-eval-patch0006/`):
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
-| heuristic, no training | 48 | 0.142 | 27% [20–36%] | 0 | 14.5 |
-| **trained** (`models/best.pt`) | 48 | 0.193 | **52% [43–60%]** | 1 run | 19.7 |
-| **trained**, deeper search | 128 | 0.204 | **66% [58–74%]** | 2 runs | 20.8 |
+| heuristic, no training | 48 | 0.140 | 26% [19–34%] | 0 | 14.3 |
+| **trained** (`models/best.pt`) | 48 | 0.191 | **59% [51–68%]** | 1 run | 19.4 |
+| **trained**, deeper search | 128 | 0.202 | 55% [47–64%] | 2 runs | 20.6 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 66 seeds to the heuristic's 35 (59
-seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.051 [+0.037,
-+0.065]. Training **roughly doubled the Act 1 clear rate** after ~1,800 self-play runs
-(about 30 minutes on 4 CPU cores), and more search per move adds another ~14 points.
-Deaths moved from Act 1 elites and hallway fights (Phantasmal Gardeners, Phrog Parasite)
-to the Act 1 bosses (Vantom, Lagavulin Matriarch, Kin) and early Act 2.
+Paired, at 48 sims: the trained agent clears Act 1 on 76 seeds to the heuristic's 33 (73
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.050 [+0.037,
++0.063]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
+(about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
++0.011 [+0.001, +0.022], p = 0.02) but does not clear Act 1 measurably more often (71 vs
+76 seeds, 37 differ, p = 0.51). Deaths moved from Act 1 hallway fights (Phantasmal
+Gardeners, Phrog Parasite) to the Act 1 bosses (Vantom, Lagavulin Matriarch, Kin) and
+the early Act 2.
 
-This checkpoint was trained *before* patch 0006 gave treasure chests their relic, so it
-has never seen a chest relic in training. Measured without that patch, the same rows read
-14% / 44% / 55% (`results/dev-run/final-eval/`): the chest relic the simulator used to
-withhold is worth 8–13 points of Act 1 clears on its own.
+The checkpoint was trained *before* both of those changes. The trained rows read 44% /
+55% with neither (`results/dev-run/final-eval/`) and 52% / 66% with the chest relics but
+the walk-away still allowed (commit 8f987fd); the heuristic went 14% → 27% → 26%. On 128
+seeds a single rate is good to about ±8 points (95%), so read the three columns of
+history as "chest relics help a lot, the rest is noise" rather than to the point.
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
 points of noise per row):
@@ -253,8 +258,9 @@ That makes it two tools in one:
   and a full trace. That is precisely the evidence needed to fix the simulator.
 * **Real-engine results.** Seeds and agent settings match `sts2rl.evaluate`, so each run is
   the twin of a simulator run, and a run that stays in sync to the end finishes exactly
-  where the simulator said it would (checked: 16 of 16 seeds identical against the
-  stand-in engine below).
+  where the simulator said it would (checked: 80 of 80 runs identical against the
+  stand-in engine below). Outcomes are reported only over the runs that were still in sync
+  when each was decided.
 
 ```bash
 bash scripts/setup_sts2cli.sh            # finds the game (WSL: /mnt/c/Program Files (x86)/Steam/...),
@@ -270,15 +276,29 @@ opens a run exactly as the simulator does (`python -m sts2rl.bridge.cli --smoke`
 lands in `runs/cli/<timestamp>/`: one JSONL trace per seed and `summary.json`.
 
 **How it's been tested:** not yet against the real engine — there is no game install where
-this was written. It was tested against `tests/fake_sts2cli.py`, a simulator-backed
-stand-in that speaks sts2-cli's protocol and keeps its habits (taken from sts2-cli's
-source): 80 full runs in sync from Neow to the end, through act transitions, shops,
-events, rest sites and multi-card selections, and a deliberately injected 1-HP error is
-caught on the floor it appears. Known gaps, all reported as desyncs rather than silently
-absorbed: sts2-cli shows only the first card reward of a fight (the shadow skips the rest
-too); Act 3's ancients aren't in the simulator; and the simulator's observation shows only
-the first 10 cards of a bigger selection screen (picks beyond them are matched by position
-alone).
+this was written. Every mapping was checked line by line against sts2-cli's source
+(`RunSimulator.cs`), and the bench was tested against `tests/fake_sts2cli.py`, a
+simulator-backed stand-in that speaks sts2-cli's protocol and keeps its habits: 80 full
+runs (48 heuristic, 32 with the trained model) in sync from Neow to the end through act
+transitions, shops, events, rest sites and multi-card selections, every one finishing
+exactly where its simulator twin does; a deliberately injected 1-HP error is caught on
+the floor it appears.
+
+What the bench has to work around, and how:
+
+* **sts2-cli's own departures from the game.** It heals between acts the moment the boss
+  dies and rounds the heal *up*; the game rounds down (a capture: 264/280 → 276), so the
+  setup script patches sts2-cli (`patches/sts2-cli/`). It shows only a room's first card
+  reward (Prayer Wheel / White Star's extra ones are dropped) and first rest option
+  (Miniature Tent): the shadow forfeits the same, and each run counts its forfeits —
+  a run with one can end differently from its twin.
+* **Moves the simulator has and the game doesn't** (rerolling or sacrificing a card reward
+  where sts2-cli has no command) are never chosen: the agent evaluates them but takes its
+  best real move, and each run counts how often that happened. Walking away from an event
+  is gone from the agent altogether — the game has no such button.
+* **Not modelled by the simulator, so reported as desyncs:** Act 3's ancients; selection
+  screens over 10 cards are only partly visible to the simulator (picks past the 10th are
+  matched by position alone).
 
 ## Limitations, honestly
 
