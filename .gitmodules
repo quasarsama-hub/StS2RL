@@ -2,3 +2,4 @@
 	path = third_party/sts2
 	url = https://github.com/evangambit/sts2
 	shallow = true
+	ignore = dirty
