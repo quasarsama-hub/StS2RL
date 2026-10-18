@@ -57,8 +57,9 @@ carries four patches for it (`patches/sts2/`):
 | `0002-fast-id-lookups` | `Cards.Get(id)` was a linear scan on every call; it dominated the step cost. Now O(1). **A card play went from 174 µs to 8 µs; end turn from 122 µs to 16 µs.** |
 | `0003-agent-exports-and-crash-guards` | Native heuristic combat rollouts (20× faster than driving them from Python), and engine exceptions reported as an error status instead of aborting the process. |
 | `0004-end-turn-flush-snapshot` | Fixes a crash ("Collection was modified") when an end-of-turn exhaust draws a card mid-flush (e.g. Dark Embrace + Ethereal); the drawn card is flushed instead of vanishing. |
+| `0005-golden-path-unknown-rooms` | Golden Compass's single-column map typed its "?" rooms as *no node*, which the map screen can't move onto, so every Golden Compass run got stuck on its second floor. |
 
-The simulator's own test suite (4,801 tests) passes with all four patches applied.
+The simulator's own test suite (4,801 tests) passes with all five patches applied.
 
 ## Results so far
 

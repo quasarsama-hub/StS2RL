@@ -36,6 +36,8 @@ LOOP_LIMIT = 4  # the same non-combat state this many times means the agent is g
 @dataclass
 class AgentConfig:
     combat_sims: int = 64
+    elite_sim_mult: float = 2.0  # hard fights get a bigger search budget
+    boss_sim_mult: float = 4.0
     c_explore: float = 0.7
     samples: int = 3  # clones per option where the outcome is random
     epsilon: float = 0.0  # chance of a random non-combat choice (self-play exploration)
@@ -161,7 +163,9 @@ class Agent:
         if key != self._combat_key or self._search is None:
             self._combat_key = key
             leaf, shaping = self._leaf_function(run)
-            cfg = combat.SearchConfig(simulations=self.cfg.combat_sims, c_explore=self.cfg.c_explore, death_shaping=shaping)
+            mult = {2: self.cfg.elite_sim_mult, 6: self.cfg.boss_sim_mult}.get(run.node_type, 1.0)
+            sims = max(1, int(self.cfg.combat_sims * mult))
+            cfg = combat.SearchConfig(simulations=sims, c_explore=self.cfg.c_explore, death_shaping=shaping)
             self._search = combat.CombatSearch(leaf, cfg, seed=self.rng.getrandbits(31))
             if record is not None:
                 record.combats += 1

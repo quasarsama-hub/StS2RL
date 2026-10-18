@@ -1,0 +1,101 @@
+diff --git a/src/Sts2Emulator.Tests/Relics/AncientStarterRelicTests.cs b/src/Sts2Emulator.Tests/Relics/AncientStarterRelicTests.cs
+index 0783b6d..614c8d2 100644
+--- a/src/Sts2Emulator.Tests/Relics/AncientStarterRelicTests.cs
++++ b/src/Sts2Emulator.Tests/Relics/AncientStarterRelicTests.cs
+@@ -1547,9 +1547,11 @@ public class RunShapingRelicTests
+         engine.State.Relics.Add(new RelicInstance(RunConstants.RelicGoldenCompass));
+         RunNonCombatEffects.ApplyRelicPickup(engine.State, RunConstants.RelicGoldenCompass);
+ 
++        // The golden path's "?" rooms carry the map's own unknown type (NodeEvent), which
++        // arrival resolves -- to an Event, while the compass is held.
+         Assert.Contains(
+             engine.State.MapNodes.Values,
+-            node => node.NodeType == RunConstants.NodeNone && node.Row > 0
++            node => node.NodeType == RunConstants.NodeEvent && node.Row > 0
+         );
+     }
+ }
+@@ -1682,7 +1684,8 @@ public class GoldenPathLengthTests
+ 
+     /// <summary>
+     /// The sequence is `GoldenPathActMap._defaultPointTypes` in order, with its Unknowns
+-    /// left unresolved -- they become Events on arrival, not at generation.
++    /// left unresolved -- typed as the map's "?" (NodeEvent) and made Events on arrival,
++    /// not at generation.
+     /// </summary>
+     [Fact]
+     public void TheSequenceIsTheGamesOwnOrder()
+@@ -1699,16 +1702,16 @@ public class GoldenPathLengthTests
+             new[]
+             {
+                 RunConstants.NodeNormal,
+-                RunConstants.NodeNone,
++                RunConstants.NodeEvent,
+                 RunConstants.NodeNormal,
+                 RunConstants.NodeRest,
+                 RunConstants.NodeNormal,
+                 RunConstants.NodeRest,
+-                RunConstants.NodeNone,
++                RunConstants.NodeEvent,
+                 RunConstants.NodeRelic,
+-                RunConstants.NodeNone,
++                RunConstants.NodeEvent,
+                 RunConstants.NodeRelic,
+-                RunConstants.NodeNone,
++                RunConstants.NodeEvent,
+                 RunConstants.NodeShop,
+                 RunConstants.NodeElite,
+                 RunConstants.NodeRest,
+@@ -1719,6 +1722,24 @@ public class GoldenPathLengthTests
+         );
+     }
+ 
++    /// <summary>
++    /// No room on the path may be typed NodeNone: the map screen offers no move onto one,
++    /// so a single such room stranded the run there.
++    /// </summary>
++    [Fact]
++    public void EveryRoomOnThePathCanBeWalkedOnto()
++    {
++        var engine = Compass();
++        int bossRow = RunMapGenerator.BossRow(engine.State);
++        for (int row = 1; row <= bossRow; row++)
++        {
++            Assert.NotEqual(
++                RunConstants.NodeNone,
++                engine.State.MapNodes[(RunConstants.MapStartCol, row)].NodeType
++            );
++        }
++    }
++
+     /// <summary>
+     /// The backstop reads the map's own boss row. On a standard map that is the constant
+     /// it always was -- so nothing about an ordinary run moves.
+diff --git a/src/Sts2Emulator/Core/Run/RunMapGenerator.cs b/src/Sts2Emulator/Core/Run/RunMapGenerator.cs
+index eb0bb3e..b337961 100644
+--- a/src/Sts2Emulator/Core/Run/RunMapGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunMapGenerator.cs
+@@ -459,16 +459,19 @@ public static class RunMapGenerator
+     private static readonly int[] GoldenPathRooms =
+     [
+         RunConstants.NodeNormal,
+-        RunConstants.NodeNone, // Unknown -- resolved on arrival, and always an Event here.
++        // Unknown -- resolved on arrival, and always an Event here. Typed as the map's
++        // "?" (NodeEvent), not as no-node: the map screen offers no move onto a
++        // NodeNone, so that typing stranded every Golden Compass run on its second floor.
++        RunConstants.NodeEvent,
+         RunConstants.NodeNormal,
+         RunConstants.NodeRest,
+         RunConstants.NodeNormal,
+         RunConstants.NodeRest,
+-        RunConstants.NodeNone,
++        RunConstants.NodeEvent,
+         RunConstants.NodeRelic,
+-        RunConstants.NodeNone,
++        RunConstants.NodeEvent,
+         RunConstants.NodeRelic,
+-        RunConstants.NodeNone,
++        RunConstants.NodeEvent,
+         RunConstants.NodeShop,
+         RunConstants.NodeElite,
+         RunConstants.NodeRest,
