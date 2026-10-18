@@ -1,0 +1,3 @@
+score 0.204  win 0.0% [0.0%,2.9%]  act1:66%  act2:2%  act3:0%  floor 20.8  (128 runs, 12.2s/run)
+most common deaths: {'hunter-killer': 12, 'bowlbugs': 9, 'lagavulin-matriarch': 9, 'vantom': 9, 'ovicopter': 8, 'slumbering-beetle': 8, 'decimillipede': 7, 'spiny-toad': 7}
+wall time 401s

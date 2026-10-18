@@ -1,0 +1,88 @@
+{
+ "split": "test",
+ "a": "heuristic",
+ "b": "models/best.pt",
+ "summary_a": {
+  "runs": 128,
+  "errors": 0,
+  "score": 0.14200367647058823,
+  "win_rate": 0.0,
+  "win_ci95": [
+   0.0,
+   0.02913799589810803
+  ],
+  "mean_floor": 14.484375,
+  "seconds_per_run": 3.398288007179687,
+  "act1_clear": 0.2734375,
+  "act2_clear": 0.0,
+  "act3_clear": 0.0,
+  "deaths": {
+   "phantasmal-gardeners": 15,
+   "phrog-parasite": 10,
+   "bygone-effigy": 8,
+   "byrdonis": 8,
+   "lagavulin-matriarch": 8,
+   "vantom": 7,
+   "chompers": 7,
+   "slumbering-beetle": 7
+  }
+ },
+ "summary_b": {
+  "runs": 128,
+  "errors": 0,
+  "score": 0.19278492647058823,
+  "win_rate": 0.0,
+  "win_ci95": [
+   0.0,
+   0.02913799589810803
+  ],
+  "mean_floor": 19.6640625,
+  "seconds_per_run": 5.162387718593713,
+  "act1_clear": 0.515625,
+  "act2_clear": 0.0078125,
+  "act3_clear": 0.0,
+  "deaths": {
+   "vantom": 12,
+   "lagavulin-matriarch": 11,
+   "kin": 10,
+   "spiny-toad": 9,
+   "slumbering-beetle": 8,
+   "soul-fysh": 7,
+   "chompers": 7,
+   "hunter-killer": 7
+  }
+ },
+ "comparison": {
+  "pairs": 128,
+  "missing": [],
+  "score_a": 0.14200367647058823,
+  "score_b": 0.19278492647058823,
+  "score_diff": 0.05078125,
+  "score_diff_ci95": [
+   0.037300857843137254,
+   0.0644933363970588
+  ],
+  "score_p_b_better": 4.999750012499375e-05,
+  "floor_diff": 5.1796875,
+  "floor_diff_ci95": [
+   3.8046875,
+   6.578320312499997
+  ],
+  "act1_a": 35,
+  "act1_b": 66,
+  "act1_mcnemar": {
+   "discordant": 59,
+   "p_two_sided": 6.530630444913366e-05,
+   "p_b_better": 3.265315222455989e-05
+  },
+  "wins_a": 0,
+  "wins_b": 0,
+  "wins_mcnemar": {
+   "discordant": 0,
+   "p_two_sided": 1.0,
+   "p_b_better": 1.0
+  }
+ },
+ "promote": true,
+ "reason": "score +0.0508 (p=0.0000), Act 1 clears 35->66"
+}
