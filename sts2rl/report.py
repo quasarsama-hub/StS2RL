@@ -22,6 +22,18 @@ def rows(run_dir: Path) -> list[dict]:
     return out
 
 
+def gate_cell(row: dict) -> str:
+    """Whether this iteration became champion (training runs from before the gate: blank)."""
+    if row["iter"] < 0:
+        return "start"
+    gate = row.get("gate")
+    if gate is None:
+        return ""
+    if gate["promoted"]:
+        return f"NEW (p={gate['score_p_b_better']:.3f})"
+    return "no"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("run_dir", type=Path)
@@ -37,7 +49,7 @@ def main() -> None:
         with np.load(shard) as z:
             shard_runs[int(shard.stem.split("_")[1])] = len(np.unique(z["run_id"]))
             states += len(z["score"])
-    header = ["iter", "self-play runs", "eval score", "act 1 clear", "act 2 clear", "full win", "mean floor"]
+    header = ["iter", "self-play runs", "eval score", "act 1 clear", "act 2 clear", "full win", "mean floor", "champion"]
     lines = []
     for row in data:
         ev = row["eval"]
@@ -48,6 +60,7 @@ def main() -> None:
         lines.append([
             name, runs, f"{ev['score']:.3f}", f"{ev.get('act1_clear', 0):.0%}", f"{ev.get('act2_clear', 0):.0%}",
             f"{ev['win_rate']:.0%} [{lo:.0%}–{hi:.0%}]", f"{ev['mean_floor']:.1f}",
+            gate_cell(row),
         ])
     if args.markdown:
         print("| " + " | ".join(header) + " |")
@@ -60,8 +73,19 @@ def main() -> None:
         for line in lines:
             print("  ".join(c.ljust(w) for c, w in zip(line, widths)))
     if data:
-        best = max(data, key=lambda r: r["eval"]["score"])
-        print(f"\nbest: iteration {best['iter']} (score {best['eval']['score']:.3f}); {states} training states recorded")
+        promoted = [r for r in data if (r.get("gate") or {}).get("promoted")]
+        gated = any("gate" in r for r in data)
+        if gated and not promoted:
+            print(f"\nchampion: still the starting champion -- no iteration passed the paired test; "
+                  f"{states} training states recorded")
+        elif promoted:
+            champ = promoted[-1]
+            print(f"\nchampion: iteration {champ['iter']} (validation score {champ['eval']['score']:.3f}, "
+                  f"promoted by paired test); {states} training states recorded")
+        else:
+            best = max(data, key=lambda r: r["eval"]["score"])
+            print(f"\nhighest validation score: iteration {best['iter']} ({best['eval']['score']:.3f}; "
+                  f"selected without a paired test); {states} training states recorded")
 
 
 if __name__ == "__main__":

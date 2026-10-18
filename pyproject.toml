@@ -18,3 +18,6 @@ dev = ["pytest>=8"]
 
 [tool.setuptools]
 packages = ["sts2rl", "sts2rl.bridge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

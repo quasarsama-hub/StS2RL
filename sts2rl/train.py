@@ -6,10 +6,13 @@ Each iteration:
   1. self-play `--runs-per-iter` runs with the current value net (plus exploration)
   2. append them to the replay buffer (one compressed shard per iteration)
   3. train the value net on the last `--replay-iters` shards, TD(lambda) targets
-  4. evaluate greedily on fixed seeds; keep the best checkpoint by score
+  4. evaluate greedily on the validation seeds and run a paired test against the current
+     champion on those same seeds; the candidate becomes champion (best.pt) only if its
+     score gain is statistically significant and it clears no significantly fewer acts
 
-Everything lands in runs/<name>/: shards, latest.pt, best.pt, metrics.jsonl.
-Re-running the same command resumes where it stopped.
+Everything lands in runs/<name>/: shards, latest.pt, best.pt (the champion),
+champion.json (its per-seed validation results), metrics.jsonl. Re-running the same
+command resumes where it stopped. The test split is never touched here.
 """
 
 from __future__ import annotations
@@ -27,7 +30,8 @@ import torch.nn.functional as Fn
 from . import paths
 from .agent import AgentConfig
 from .dataset import Replay, append_jsonl, save_shard
-from .evaluate import format_summary, run_eval, summarize
+from .evaluate import format_summary, per_seed, run_eval, split_offset, summarize
+from .stats import compare_paired, promotion_decision
 from .model import ValueNet
 from .selfplay import Pool
 
@@ -104,6 +108,9 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--replay-iters", type=int, default=8)
     ap.add_argument("--hidden", type=int, default=256)
+    ap.add_argument("--gate-alpha", type=float, default=0.05, help="significance level a new champion must reach")
+    ap.add_argument("--selfplay-model", choices=["latest", "champion"], default="latest",
+                    help="which checkpoint plays self-play games (latest keeps learning; champion never regresses)")
     args = ap.parse_args()
 
     out = paths.RUNS_DIR / args.name
@@ -113,31 +120,44 @@ def main() -> None:
     latest, best = out / "latest.pt", out / "best.pt"
     metrics_path = out / "metrics.jsonl"
 
+    champion_path = out / "champion.json"
+    split_offset("validation", args.eval_runs)  # refuses a validation set that would overlap the test split
+
     done = sorted(shards.glob("iter_*.npz"))
     start = len(done)
-    best_score = -1.0
-    if metrics_path.exists():
-        for line in metrics_path.read_text().splitlines():
-            row = json.loads(line)
-            if "eval" in row:
-                best_score = max(best_score, row["eval"]["score"])
     model = ValueNet.load(latest) if latest.exists() else ValueNet(hidden=args.hidden)
-    print(f"[{args.name}] starting at iteration {start}; best eval score so far {best_score:.3f}")
+    print(f"[{args.name}] starting at iteration {start}")
 
     sp_cfg = AgentConfig(combat_sims=args.sims, samples=args.samples, epsilon=args.epsilon, max_act=args.max_act)
     ev_cfg = AgentConfig(combat_sims=args.eval_sims, samples=args.samples, max_act=args.max_act)
+    eval_key = {"runs": args.eval_runs, "sims": args.eval_sims, "samples": args.samples, "max_act": args.max_act}
     rng = random.Random(1234 + start)
 
     with Pool(args.workers) as pool:
-        if start == 0 and not best.exists():
+        champion = load_champion(champion_path, eval_key)
+        if champion is None:
+            # The heuristic (no checkpoint) is the first champion; an existing best.pt from
+            # before champion tracking takes its place. Either way, its per-seed validation
+            # results are what every candidate is paired against.
+            who = best if best.exists() else None
             t = time.perf_counter()
-            summary, _ = run_eval(None, args.eval_runs, ev_cfg, args.workers, pool=pool)
-            print(f"[baseline, untrained heuristic] {format_summary(summary)}  ({time.perf_counter() - t:.0f}s)")
-            append_jsonl(metrics_path, {"iter": -1, "eval": summary, "agent": "heuristic"})
+            summary, recs = run_eval(who, args.eval_runs, ev_cfg, args.workers, pool=pool)
+            name = "best.pt (existing)" if who else "untrained heuristic"
+            print(f"[champion: {name}] {format_summary(summary)}  ({time.perf_counter() - t:.0f}s)")
+            champion = {"model": str(who) if who else "heuristic", "iteration": -1, "eval_key": eval_key,
+                        "summary": summary, "rows": per_seed(recs)}
+            save_champion(champion_path, champion)
+            if who is None:
+                append_jsonl(metrics_path, {"iter": -1, "eval": summary, "agent": "heuristic"})
+        print(f"[{args.name}] champion: {champion['model']} (iteration {champion['iteration']}), "
+              f"validation score {champion['summary']['score']:.3f}")
 
         for it in range(start, start + args.iterations):
             t0 = time.perf_counter()
-            model_path = latest if latest.exists() else None
+            if args.selfplay_model == "champion" and best.exists():
+                model_path = best
+            else:
+                model_path = latest if latest.exists() else None
             seeds = ["".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZ0123456789") for _ in range(10)) for _ in range(args.runs_per_iter)]
             records = list(pool.play(seeds, sp_cfg, model_path, base_seed=it * 100_000))
             sp = summarize(records, args.max_act)
@@ -159,16 +179,40 @@ def main() -> None:
             )
             if (it + 1) % args.eval_every == 0:
                 t2 = time.perf_counter()
-                ev, _ = run_eval(latest, args.eval_runs, ev_cfg, args.workers, pool=pool)
+                ev, recs = run_eval(latest, args.eval_runs, ev_cfg, args.workers, pool=pool)
+                rows = per_seed(recs)
+                cmp = compare_paired(champion["rows"], rows)
+                promote, why = promotion_decision(cmp, alpha=args.gate_alpha)
                 row["eval"] = ev
+                row["gate"] = {"vs_champion_iteration": champion["iteration"], "promoted": promote, "reason": why, **cmp}
                 row["t_eval"] = time.perf_counter() - t2
-                improved = ev["score"] > best_score
-                if improved:
-                    best_score = ev["score"]
+                if promote:
                     shutil.copy(latest, best)
-                line += f"\n           eval: {format_summary(ev)}{'  << new best' if improved else ''}"
+                    champion = {"model": str(best), "iteration": it, "eval_key": eval_key, "summary": ev, "rows": rows}
+                    save_champion(champion_path, champion)
+                verdict = "NEW CHAMPION" if promote else f"champion stays (iter {row['gate']['vs_champion_iteration']})"
+                line += (f"\n           eval: {format_summary(ev)}"
+                         f"\n           vs champion: {verdict} -- {why}")
             append_jsonl(metrics_path, row)
             print(line, flush=True)
+
+
+def load_champion(path, eval_key: dict) -> dict | None:
+    """The champion's cached per-seed validation results, if they are still comparable.
+
+    Evaluation is deterministic per (model, seed, settings), so the cache stays valid
+    until the validation settings change; then the champion is simply re-evaluated.
+    """
+    if not path.exists():
+        return None
+    champion = json.loads(path.read_text())
+    return champion if champion.get("eval_key") == eval_key else None
+
+
+def save_champion(path, champion: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(champion, indent=1))
+    tmp.replace(path)
 
 
 if __name__ == "__main__":

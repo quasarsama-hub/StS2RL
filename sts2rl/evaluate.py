@@ -1,16 +1,21 @@
 """Evaluate an agent on a fixed set of seeds.
 
     python -m sts2rl.evaluate --agent heuristic --runs 64
-    python -m sts2rl.evaluate --model runs/main/best.pt --runs 200 --sims 128
+    python -m sts2rl.evaluate --model runs/main/best.pt --runs 200 --sims 128 --split test
 
-Same seeds every time, so two checkpoints are compared on identical runs.
+Seeds come in two disjoint splits:
+
+  validation  EVAL000000-EVAL000999  what training uses to pick checkpoints
+  test        EVAL001000 onwards     final assessment only; nothing is ever selected on it
+
+Same seeds every time and evaluation is deterministic, so two checkpoints are compared
+on identical runs (see sts2rl.compare for the paired statistics).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import statistics
 import time
 from collections import Counter
@@ -18,20 +23,30 @@ from pathlib import Path
 
 from .agent import AgentConfig, RunRecord
 from .selfplay import Pool
+from .stats import wilson
+
+SPLITS = {"validation": 0, "test": 1000}
+VALIDATION_SIZE = SPLITS["test"] - SPLITS["validation"]
 
 
 def eval_seeds(n: int, offset: int = 0) -> list[str]:
     return [f"EVAL{i:06d}" for i in range(offset, offset + n)]
 
 
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (0.0, 0.0)
-    p = k / n
-    denom = 1 + z * z / n
-    centre = (p + z * z / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return (max(0.0, centre - half), min(1.0, centre + half))
+def split_offset(split: str, n: int) -> int:
+    offset = SPLITS[split]
+    if split == "validation" and n > VALIDATION_SIZE:
+        raise ValueError(f"validation has {VALIDATION_SIZE} seeds; {n} would run into the test split")
+    return offset
+
+
+def per_seed(records: list[RunRecord]) -> dict:
+    """seed -> the outcome fields paired comparisons use. Errored runs are left out."""
+    return {
+        r.seed: {"score": r.score, "floor": r.final_floor, "act1": r.acts_cleared >= 1, "won": bool(r.won)}
+        for r in records
+        if not r.death_encounter.startswith("ERROR")
+    }
 
 
 def summarize(records: list[RunRecord], max_act: int) -> dict:
@@ -83,7 +98,8 @@ def main() -> None:
     ap.add_argument("--model", help="value-net checkpoint (.pt)")
     ap.add_argument("--agent", choices=["model", "heuristic"], default="model")
     ap.add_argument("--runs", type=int, default=64)
-    ap.add_argument("--offset", type=int, default=0, help="first eval seed index")
+    ap.add_argument("--split", choices=sorted(SPLITS), default="validation")
+    ap.add_argument("--offset", type=int, help="first eval seed index (overrides --split)")
     ap.add_argument("--sims", type=int, default=64)
     ap.add_argument("--samples", type=int, default=3)
     ap.add_argument("--max-act", type=int, default=3)
@@ -98,7 +114,8 @@ def main() -> None:
         model_path = Path(args.model)
     cfg = AgentConfig(combat_sims=args.sims, samples=args.samples, max_act=args.max_act)
     t = time.perf_counter()
-    summary, records = run_eval(model_path, args.runs, cfg, args.workers, args.offset)
+    offset = args.offset if args.offset is not None else split_offset(args.split, args.runs)
+    summary, records = run_eval(model_path, args.runs, cfg, args.workers, offset)
     print(format_summary(summary))
     print("most common deaths:", summary["deaths"])
     if summary.get("errors"):
