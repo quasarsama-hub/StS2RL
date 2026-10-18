@@ -5,3 +5,4 @@ runs/
 *.pt
 !models/*.pt
 .pytest_cache/
+third_party/sts2-cli/
