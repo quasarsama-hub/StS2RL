@@ -16,8 +16,8 @@ At each decision the agent reasons on the shadow state exactly as it does in tra
 a simulator action, and the bridge sends the game the command that means the same thing.
 Screens with nothing to decide (claiming gold, opening a chest) are clicked through.
 
-After every step the bridge compares the game with the shadow -- floor, HP, gold, the hand,
-the enemies. If they ever disagree, the simulator has diverged from the real game and its
+After every step the bridge compares the game with the shadow -- floor, HP, gold, relics,
+the hand, the enemies. If they ever disagree, the simulator has diverged from the real game and its
 predictions can no longer be trusted, so the bridge stops (or, with --keep-going, falls
 back to simple scripted play) and writes the trace for diagnosis.
 """
@@ -124,7 +124,8 @@ class ShadowSim:
             self.step_action(int(payload.get("card_index", 0)))
             return
         if name in {"combat_confirm_selection", "advance_dialogue", "claim_treasure_relic"}:
-            if name == "claim_treasure_relic" and self.phase == 10:
+            # The chest's relic is the only item on the simulator's reward screen (patch 0006).
+            if name == "claim_treasure_relic" and self.phase == sim.PHASE_RELIC_REWARD:
                 self.step_action(0)
             return
         target_map = build_target_map(((state_before.get("battle") or {}).get("enemies")) or [])
@@ -314,9 +315,14 @@ def compare(state: dict, shadow: ShadowSim) -> list[str]:
                 sim_hp.append(int(obs[at]))
         if game_hp != sorted(sim_hp):
             diffs.append(f"enemy hp game={game_hp} sim={sorted(sim_hp)}")
-    elif st in {"map", "shop", "rest_site", "event", "card_reward"} and player.get("gold") is not None:
-        if int(player["gold"]) != int(info["gold"]):
+    elif st in {"map", "shop", "rest_site", "event", "card_reward"}:
+        if player.get("gold") is not None and int(player["gold"]) != int(info["gold"]):
             diffs.append(f"gold game={player['gold']} sim={info['gold']}")
+        if player.get("relics") is not None:
+            game_relics = sorted(relic_id(r.get("id", "")) for r in player["relics"])
+            sim_relics = sorted(int(r) for r in info["relics"] if int(r))
+            if game_relics != sim_relics:
+                diffs.append(f"relics game={[gd.relic_name(r) for r in game_relics]} sim={[gd.relic_name(r) for r in sim_relics]}")
     return diffs
 
 

@@ -1,0 +1,144 @@
+diff --git a/scripts/replay_full_run_trace.py b/scripts/replay_full_run_trace.py
+index 10a9491..7cd84e2 100644
+--- a/scripts/replay_full_run_trace.py
++++ b/scripts/replay_full_run_trace.py
+@@ -31,6 +31,7 @@ from sts2_gym.run_env import (
+     NODE_BOSS,
+     NODE_ELITE,
+     NODE_NORMAL,
++    NODE_RELIC,
+     PHASE_ANCIENT,
+     PHASE_BUNDLE_SELECT,
+     PHASE_CARD_REWARD,
+@@ -683,6 +684,9 @@ def summarize_env(obs: np.ndarray, info: dict[str, Any]) -> dict[str, Any]:
+         if phase == PHASE_COMBAT
+         else PHASE_STATE_TYPES.get(phase, "unknown")
+     )
++    if phase == PHASE_RELIC_REWARD and int(info["current_node_type"]) == NODE_RELIC:
++        # The chest's relic rides the reward screen; the game calls the room "treasure".
++        state_type = "treasure"
+     return {
+         "state_type": state_type,
+         "run": {
+diff --git a/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs b/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs
+new file mode 100644
+index 0000000..d7fdc3a
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs
+@@ -0,0 +1,69 @@
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// A treasure chest pays a relic as well as its gold. The emulator used to pay only the
++/// gold: the `treasure_room_relics` stream and the shared grab bag were built and cloned
++/// but never drawn from.
++/// </summary>
++public class TreasureChestRelicTests
++{
++    private static RunEngine Run(string seed = "ABCDEF")
++    {
++        var engine = new RunEngine();
++        engine.Reset(seed);
++        return engine;
++    }
++
++    [Fact]
++    public void AChestOffersOneSharedPoolRelicOnTheRewardScreen()
++    {
++        var engine = Run();
++        var state = engine.State;
++
++        RunRewardGenerator.EnterTreasureRoom(state);
++
++        Assert.Equal(RunPhase.RelicReward, state.Phase);
++        Assert.NotEqual(0, state.RelicReward);
++        Assert.Contains(state.RelicReward, GeneratedData.RelicPools.Shared.ToArray());
++        Assert.Contains(
++            GeneratedData.Relics.Get(state.RelicReward).Rarity,
++            new[] { RelicRarity.Common, RelicRarity.Uncommon, RelicRarity.Rare }
++        );
++        Assert.Equal(1, state.Rng.TreasureRoomRelics.CallCount);
++    }
++
++    [Fact]
++    public void ClaimingTheChestRelicObtainsItAndStrikesItFromBothBags()
++    {
++        var engine = Run();
++        var state = engine.State;
++        RunRewardGenerator.EnterTreasureRoom(state);
++        int offered = state.RelicReward;
++
++        Assert.Equal(0, engine.Step(0, -1, out _, out _, out _));
++
++        Assert.Contains(state.Relics, relic => relic.DefId == offered);
++        Assert.DoesNotContain(offered, state.RelicBag.Remaining);
++        Assert.DoesNotContain(offered, state.SharedRelicBag.Remaining);
++    }
++
++    [Fact]
++    public void SilverCrucibleStillEmptiesTheChest()
++    {
++        var engine = Run();
++        var state = engine.State;
++        state.Relics.Add(new RelicInstance(RunConstants.RelicSilverCrucible, 0));
++        int gold = state.Gold;
++
++        RunRewardGenerator.EnterTreasureRoom(state);
++
++        Assert.Equal(RunPhase.Treasure, state.Phase);
++        Assert.Equal(0, state.RelicReward);
++        Assert.Equal(gold, state.Gold);
++        Assert.Equal(0, state.Rng.TreasureRoomRelics.CallCount);
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+index 34db889..2f8feca 100644
+--- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+@@ -1005,7 +1005,28 @@ public static class RunRewardGenerator
+ 
+         int gold = state.PlayerRng.Rewards.NextInt(42, 53);
+         RunNonCombatEffects.GainGold(state, (int)(gold * 0.75));
+-        state.Phase = RunPhase.Treasure;
++
++        // The chest's relic. `TreasureRoom` opens a relic-picking session
++        // (`TreasureRoomRelicSynchronizer.BeginRelicPicking`) that offers one relic per
++        // player, drawn from the SHARED grab bag at a rarity rolled on the run's own
++        // `treasure_room_relics` stream -- the stream and the bag this emulator already
++        // builds and clones but, until now, never drew from, so every chest paid its gold
++        // and no relic. It goes on the ordinary reward screen so the claim runs the
++        // relic's AfterObtained (and any screen that opens) exactly as an elite's does.
++        state.RelicReward = NextTreasureRelic(state);
++        state.Phase = RunPhase.RelicReward;
++    }
++
++    /// <summary>One chest relic: rarity off the treasure stream, front of the shared bag.</summary>
++    public static int NextTreasureRelic(RunState state)
++    {
++        var rarity = RelicGrabBag.RollRarity(state.Rng.TreasureRoomRelics);
++        int? relicId = state.SharedRelicBag.Pull(
++            rarity,
++            fromFront: true,
++            RelicGrabBag.AllowedInSoloRun(state.Floor)
++        );
++        return relicId ?? FallbackRelic;
+     }
+ 
+     public static void EnterShop(RunState state)
+diff --git a/src/sts2_gym/commands.py b/src/sts2_gym/commands.py
+index 7074c27..f77333d 100644
+--- a/src/sts2_gym/commands.py
++++ b/src/sts2_gym/commands.py
+@@ -259,6 +259,8 @@ def translate_command(
+     if action_name == "take_chest_relic":
+         if phase == PHASE_TREASURE:
+             return REWARD_SKIP_ACTION
++        if phase == PHASE_RELIC_REWARD:
++            return 0  # the chest's relic is the only item on its reward screen
+         return None
+     if action_name == "NetPickRelicAction":
+         return None

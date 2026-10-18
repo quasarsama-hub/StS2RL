@@ -135,3 +135,19 @@ def test_compare_detects_divergence():
             fired = True
             break
     assert skipped and fired
+
+
+def test_chest_relic_matches_the_real_game():
+    """Every chest a recorded run opened offers, in the patched simulator, the relic the
+    game offered (patch 0006 -- before it, chests paid gold and no relic at all)."""
+    checked = 0
+    for _, data in clean_traces():
+        for before, payload, after, shadow in replay(data):
+            shadow.apply(payload, before)
+            offered = (after.get("treasure") or {}).get("relics") or []
+            if after.get("state_type") == "treasure" and offered and before.get("state_type") == "map":
+                assert shadow.phase == live.sim.PHASE_RELIC_REWARD
+                sim_relic = int(shadow.info["pending_rewards"][2])
+                assert sim_relic == live.relic_id(offered[0]["id"]), (data["seed"], offered[0]["id"])
+                checked += 1
+    assert checked >= 1
