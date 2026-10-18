@@ -1,0 +1,277 @@
+{
+  "before_imitation": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 4.81,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "after_imitation_before_rl": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 7.34,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "after_rl": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 7.2,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "teacher": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 9.83,
+    "mean_hp": 0.71,
+    "outcomes": {
+      "aborted": 0,
+      "death": 97,
+      "timeout": 0,
+      "win": 3
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.03,
+    "win_rate_ci95": [
+      0.010254524024038925,
+      0.0845193642905276
+    ]
+  },
+  "imitation_comparison": {
+    "baseline": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 4.81,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 7,
+    "candidate": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.34,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "eligible_pairs": 100,
+    "excluded_pairs": 0,
+    "excluded_seeds": [],
+    "floor_delta": 2.53,
+    "floor_delta_ci95": [
+      1.76,
+      3.27
+    ],
+    "min_pairs": 100,
+    "pairs": 100,
+    "promote": true,
+    "promotion_rule": "No timeouts/aborts, sufficient clean pairs, and lower 95% win delta > 0; or lower 95% floor delta > 0 with lower 95% win delta >= 0.",
+    "reasons": [],
+    "win_delta": 0.0,
+    "win_delta_ci95": [
+      0.0,
+      0.0
+    ]
+  },
+  "additional_rl_comparison": {
+    "baseline": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.34,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 7,
+    "candidate": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.2,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "eligible_pairs": 100,
+    "excluded_pairs": 0,
+    "excluded_seeds": [],
+    "floor_delta": -0.14,
+    "floor_delta_ci95": [
+      -0.63,
+      0.34
+    ],
+    "min_pairs": 100,
+    "pairs": 100,
+    "promote": false,
+    "promotion_rule": "No timeouts/aborts, sufficient clean pairs, and lower 95% win delta > 0; or lower 95% floor delta > 0 with lower 95% win delta >= 0.",
+    "reasons": [
+      "95% intervals do not establish the required improvement"
+    ],
+    "win_delta": 0.0,
+    "win_delta_ci95": [
+      0.0,
+      0.0
+    ]
+  },
+  "new_rl_steps": 2048,
+  "source_rl_steps": 2048,
+  "victory_scope": "act1",
+  "focused_tests_passed": 110,
+  "teacher_demonstration_episodes": {
+    "aborted_rate": 0.0,
+    "episodes": 256,
+    "floor_samples": 256,
+    "hp_samples": 256,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 8.9453125,
+    "mean_hp": 1.36328125,
+    "outcomes": {
+      "aborted": 0,
+      "death": 243,
+      "timeout": 0,
+      "win": 13
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 256,
+    "win_rate": 0.05078125,
+    "win_rate_ci95": [
+      0.029913811386553534,
+      0.08493105962106533
+    ]
+  },
+  "demonstration_samples": 24624,
+  "recipe": {
+    "bc_batch_size": 256,
+    "bc_epochs": 12,
+    "bc_learning_rate": 0.001,
+    "demonstration_episodes": 256,
+    "labels": "ordinary combat decisions only; no pending-choice or macro labels",
+    "objective": "Act 1 boss cleared; not a full-run victory",
+    "ppo_learning_rate": 0.0001,
+    "version": "combat-cloning-act1-v1"
+  },
+  "fingerprint": "d4ec40b6cf9f335d080eb4697fd5aedc4defcee84622fb4464e2b3882519c133",
+  "source_hashes": {
+    "scripts/learn_act1.py": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+    "src/spire2_rl/imitation.py": "777a3847a22c9b4dadb4583a779b5312845afb3ecd598951bebb2b2d69ec0696",
+    "scripts/fair_teacher.py": "eca679b66fefb9cbeb4f94d62f3773d2454128a56c74eb35a1cb29cc9a61d5f2"
+  },
+  "note": "Cloud integration trial on a different checkpoint from the user. The PPO budget was shortened to 2048. Imitation improved mean floor; further RL improvement and native game transfer are unverified."
+}

@@ -1,0 +1,105 @@
+{
+  "stage": "frozen_numbered_cycle_strength_check_release",
+  "tests_passed": 35,
+  "tests_file": "tests/test_act1_cycle_check.py",
+  "test_fixture_scope": "Persisted model fixtures with real Torch tensors and optimizer state; masked environment and serialized model APIs are controlled in targeted tests. Actual PPO loading and gameplay are checked separately in the local runtime smoke.",
+  "released_files_sha256": {
+    "scripts/check_act1_cycle.py": "a8c870301f58b37bfdb336b70f92ba4bca20e4fc4bfdde631db05acb50df14d7",
+    "tests/test_act1_cycle_check.py": "06ea2c40c83fa056a7b04dad3e5559e658370c4a089138f92c2d51698224540e",
+    "docs/cycle-strength-check.md": "1c2ff02f45f46083914653d2461245f59ba30d9348e848324891aca375569b99"
+  },
+  "unchanged_fingerprinted_files_sha256": {
+    "scripts/act1_rl_trial.py": "dba38366def90b94fcfa53efb30138aab4977158964b0fd802c4101c14729e96",
+    "scripts/check_act1_trial.py": "e56b872d9b2079c975c61954c2f5180bc53d0f26cf727b577a5c7ebb88186dbb",
+    "scripts/selection_rl.py": "38602fc821ae09237068645826ec3ca51ede9d69778e402f3a8105a435e1aba4",
+    "scripts/learn_act1.py": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+    "src/spire2_rl/emulator.py": "0c36aaae2a49b0549be76ac64cccb2d2950ae778f5b197ab6c56708ea13c8d04",
+    "src/spire2_rl/runner.py": "545e34797972ef24db5e6e87659ecd00007881de66e24fc5fb8b2d0b7209009d",
+    "src/spire2_rl/experiment.py": "4211b8a8a512221e0228c0c3bab8e763fb297026fe4967682972d36bb8c6e1ba",
+    "src/spire2_rl/study.py": "7a95a018790f75146f4eba54769fbb4111056f217621792855cc8c359eb3662d",
+    "src/spire2_rl/models.py": "35d51d667554a8dfd7af5f131b7b9d8a4beadd237ac0a370e9e1e2e1b277ec42",
+    "src/spire2_rl/imitation.py": "777a3847a22c9b4dadb4583a779b5312845afb3ecd598951bebb2b2d69ec0696",
+    "src/spire2_rl/selection.py": "c18eab3d2c60d349a8f87222c5a0deb1d640a70a9d43f83842fdc0efea2c828e",
+    "scripts/continue_act1_rl.py": "653c097f3fe84754dc62b7639536bb3b28bc181ddeb4c5960336198657b225f6",
+    "scripts/check_potion_failures.py": "c8010ad0437876319c6ce460729339bfd3fdcba3009285232090f233f7f4f459",
+    "src/spire2_rl/potion_capacity.py": "c57ee2f210e89e3138bc92ab3a8229ad2ca681b0ec1dcf1186901b8c0e7ffa92",
+    "scripts/act1_cycles.py": "89b5e36c50b43fc96ec6282399eb46a715924baebb5c786e88a02960e5af06d1"
+  },
+  "local_operational_smoke": {
+    "actual_frozen_policy_counters": {
+      "baseline": 3072,
+      "candidate": 4096
+    },
+    "all_source_and_training_files_unchanged": true,
+    "baseline": {
+      "aborted_rate": 0.0,
+      "episodes": 50,
+      "floor_samples": 50,
+      "hp_samples": 50,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.36,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 50,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 50,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        6.938893903907228e-18,
+        0.07134759913335872
+      ]
+    },
+    "candidate": {
+      "aborted_rate": 0.0,
+      "episodes": 50,
+      "floor_samples": 50,
+      "hp_samples": 50,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 8.02,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 50,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 50,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        6.938893903907228e-18,
+        0.07134759913335872
+      ]
+    },
+    "note": "Actual frozen-policy factory, model counters, batched gameplay and raw report validation. This used a separate short local policy and a smaller internal sample; full public workflow is tested separately with persisted fixtures.",
+    "public_3000_pair_command_exercised": false,
+    "script_sha256": "a8c870301f58b37bfdb336b70f92ba4bca20e4fc4bfdde631db05acb50df14d7",
+    "simulated_runs": 100,
+    "stage": "frozen_cycle_lower_level_runtime_verification",
+    "user_policy_tested": false
+  },
+  "operational_smoke_record_sha256": "abbe7f37580d716fbb49450b21d0384b7f1153549b3c88fd51586841fd61ae6c",
+  "production_defaults": {
+    "cycle": 2,
+    "matched_pairs": 3000,
+    "simulated_game_runs": 6000,
+    "validation_start_from_reported_cycle": 4700,
+    "reported_baseline_decisions": 242744,
+    "reported_candidate_decisions": 323640,
+    "additional_training_steps": 0,
+    "training_gate_changed": false,
+    "automatic_budget_extension": false,
+    "champion_updated": false
+  },
+  "primary_outcome": "Act 1 clear rate; positive direction and exact paired two-sided McNemar p<0.05 on a clean fixed sample",
+  "secondary_outcome": "Floor reached, assessed separately",
+  "fixed_protocol": "Before/after checkpoint hashes, source fingerprint, sample size, fresh validation block, deterministic inference and checker version pinned before gameplay. Completed evidence is cached and checksum-validated. An interrupted incomplete evaluation restarts the same frozen schedule.",
+  "statistical_scope": "One fresh prespecified check, separate from the earlier data-dependent cycle result. Do not increase the sample after seeing outcomes or claim global confidence for the learning series.",
+  "scope": "Emulator Act 1. Native transfer unverified. Runtime smoke did not test the user policy or execute the public 3000-pair command."
+}

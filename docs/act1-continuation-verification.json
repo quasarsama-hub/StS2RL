@@ -1,0 +1,90 @@
+{
+  "stage": "capacity_aware_act1_continuation_release",
+  "tests_passed": 30,
+  "tests_file": "tests/test_act1_continuation.py",
+  "released_files_sha256": {
+    "scripts/continue_act1_rl.py": "653c097f3fe84754dc62b7639536bb3b28bc181ddeb4c5960336198657b225f6",
+    "tests/test_act1_continuation.py": "67843e73c0285c04013177709b883afed551a731e617f4279d09a62c10c9071c",
+    "docs/act1-continuation.md": "63b2588727a8d15883493ab156de5d7385373090c78a9919285301ecb7e6a941"
+  },
+  "unchanged_fingerprinted_files_sha256": {
+    "scripts/act1_rl_trial.py": "dba38366def90b94fcfa53efb30138aab4977158964b0fd802c4101c14729e96",
+    "scripts/check_act1_trial.py": "e56b872d9b2079c975c61954c2f5180bc53d0f26cf727b577a5c7ebb88186dbb",
+    "scripts/selection_rl.py": "38602fc821ae09237068645826ec3ca51ede9d69778e402f3a8105a435e1aba4",
+    "scripts/learn_act1.py": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+    "src/spire2_rl/emulator.py": "0c36aaae2a49b0549be76ac64cccb2d2950ae778f5b197ab6c56708ea13c8d04",
+    "src/spire2_rl/runner.py": "545e34797972ef24db5e6e87659ecd00007881de66e24fc5fb8b2d0b7209009d",
+    "src/spire2_rl/experiment.py": "4211b8a8a512221e0228c0c3bab8e763fb297026fe4967682972d36bb8c6e1ba",
+    "src/spire2_rl/study.py": "7a95a018790f75146f4eba54769fbb4111056f217621792855cc8c359eb3662d",
+    "src/spire2_rl/models.py": "35d51d667554a8dfd7af5f131b7b9d8a4beadd237ac0a370e9e1e2e1b277ec42",
+    "src/spire2_rl/imitation.py": "777a3847a22c9b4dadb4583a779b5312845afb3ecd598951bebb2b2d69ec0696",
+    "src/spire2_rl/selection.py": "c18eab3d2c60d349a8f87222c5a0deb1d640a70a9d43f83842fdc0efea2c828e"
+  },
+  "existing_potion_repair_code_unchanged": true,
+  "local_operational_pilot": {
+    "user_policy_tested": false,
+    "production_eligibility_gate_exercised_in_pilot": false,
+    "production_eligibility_gate_tested_with_persisted_fixtures": true,
+    "weights_and_optimizer_exactly_restored": true,
+    "source_checkpoint_unchanged": true,
+    "source_counter": 1024,
+    "new_rl_steps": 1024,
+    "before": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.0,
+      "mean_hp": 0.14,
+      "outcomes": {
+        "aborted": 0,
+        "death": 99,
+        "timeout": 0,
+        "win": 1
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.01,
+      "win_rate_ci95": [
+        0.0017674320641406505,
+        0.054486196178705315
+      ]
+    },
+    "after": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 6.99,
+      "mean_hp": 0.43,
+      "outcomes": {
+        "aborted": 0,
+        "death": 98,
+        "timeout": 0,
+        "win": 2
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.02,
+      "win_rate_ci95": [
+        0.00550196755016235,
+        0.07001179072854388
+      ]
+    },
+    "raw_evidence_sha256": "4fda9b3d65bdedb84a6dddf708109e4f22cc16b229514c8eaa07e5cc3ec94d11",
+    "factory_manifest_sha256": "57c4afbd981018ce726010a71cba9f7a8475de435d139fc16b3711fdda49f3f4",
+    "training_status": "completed",
+    "champion_updated": false
+  },
+  "production_defaults": {
+    "additional_decisions": 80000,
+    "paired_validation_runs": 1000,
+    "validation_start": 1700
+  },
+  "optimizer_semantics": "Policy/value tensors and PPO Adam state retained; active games and rollout observations restart on reserved new seeds",
+  "scope": "emulator Act 1; native transfer unverified"
+}

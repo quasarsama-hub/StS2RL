@@ -1,0 +1,10 @@
+.venv/
+.external/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.cache/
+scratch-*.log
+experiments/
+artifacts/
+*.zip

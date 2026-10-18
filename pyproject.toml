@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spire2-rl"
+version = "0.1.0"
+description = "Reproducible Ironclad A0 learning experiments with explicit simulator provenance"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26,<3",
+  "gymnasium==1.2.0",
+  "torch>=2.3",
+  "stable-baselines3==2.7.0",
+  "sb3-contrib==2.7.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+spire2-rl = "spire2_rl.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

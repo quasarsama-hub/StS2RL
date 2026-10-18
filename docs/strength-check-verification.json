@@ -1,0 +1,144 @@
+{
+  "focused_tests_passed": 33,
+  "released_checker_sha256": "e56b872d9b2079c975c61954c2f5180bc53d0f26cf727b577a5c7ebb88186dbb",
+  "pilot_checker_sha256": "26d049bd0cb9f6be5a1855fc71e6d6a8ab7399ad2267064d99544acec9471458",
+  "pilot_episodes_per_policy": 1000,
+  "pilot_baseline": {
+    "aborted_rate": 0.0,
+    "episodes": 1000,
+    "floor_samples": 1000,
+    "hp_samples": 1000,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 7.041,
+    "mean_hp": 0.031,
+    "outcomes": {
+      "aborted": 0,
+      "death": 999,
+      "timeout": 0,
+      "win": 1
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 1000,
+    "win_rate": 0.001,
+    "win_rate_ci95": [
+      0.00017654637062607809,
+      0.0056425585979579355
+    ]
+  },
+  "pilot_candidate": {
+    "aborted_rate": 0.0,
+    "episodes": 1000,
+    "floor_samples": 1000,
+    "hp_samples": 1000,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 6.864,
+    "mean_hp": 0.014,
+    "outcomes": {
+      "aborted": 0,
+      "death": 999,
+      "timeout": 0,
+      "win": 1
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 1000,
+    "win_rate": 0.001,
+    "win_rate_ci95": [
+      0.00017654637062607809,
+      0.0056425585979579355
+    ]
+  },
+  "pilot_comparison": {
+    "baseline": {
+      "aborted_rate": 0.0,
+      "episodes": 1000,
+      "floor_samples": 1000,
+      "hp_samples": 1000,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 7.041,
+      "mean_hp": 0.031,
+      "outcomes": {
+        "aborted": 0,
+        "death": 999,
+        "timeout": 0,
+        "win": 1
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 1000,
+      "win_rate": 0.001,
+      "win_rate_ci95": [
+        0.00017654637062607809,
+        0.0056425585979579355
+      ]
+    },
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 7,
+    "candidate": {
+      "aborted_rate": 0.0,
+      "episodes": 1000,
+      "floor_samples": 1000,
+      "hp_samples": 1000,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 6.864,
+      "mean_hp": 0.014,
+      "outcomes": {
+        "aborted": 0,
+        "death": 999,
+        "timeout": 0,
+        "win": 1
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 1000,
+      "win_rate": 0.001,
+      "win_rate_ci95": [
+        0.00017654637062607809,
+        0.0056425585979579355
+      ]
+    },
+    "eligible_pairs": 1000,
+    "excluded_pairs": 0,
+    "excluded_seeds": [],
+    "floor_delta": -0.177,
+    "floor_delta_ci95": [
+      -0.322,
+      -0.031
+    ],
+    "min_pairs": 100,
+    "pairs": 1000,
+    "promote": false,
+    "promotion_rule": "No timeouts/aborts, sufficient clean pairs, and lower 95% win delta > 0; or lower 95% floor delta > 0 with lower 95% win delta >= 0.",
+    "reasons": [
+      "95% intervals do not establish the required improvement"
+    ],
+    "win_delta": 0.0,
+    "win_delta_ci95": [
+      -0.003,
+      0.003
+    ]
+  },
+  "pilot_training_record": {
+    "budget_boundary_discards": 4,
+    "interrupted_checkpoint_steps": [],
+    "latest_decisions": 1024,
+    "latest_remainder_within_rollout": 0,
+    "note": "Training policies change. Counts locate positive reward examples, not held-out strength. Collected decisions can include a discarded partial rollout after interruption.",
+    "other_abort_reasons": {},
+    "other_aborted_episodes": 0,
+    "rollout_size": 1024,
+    "session_statuses": {
+      "completed": 1
+    },
+    "status": "read",
+    "training_outcomes": {
+      "death": 8,
+      "timeout": 0,
+      "win": 0
+    }
+  },
+  "original_trial_launcher_sha256": "dba38366def90b94fcfa53efb30138aab4977158964b0fd802c4101c14729e96",
+  "original_act1_launcher_sha256": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+  "note": "Actual 2000 simulated-run pilot used a separate local 1024-step candidate, not the user model. It preceded final source/accounting validation guards and the exact rare-clear test. All 33 focused tests pass on released checker bytes. Original training code and experiment fingerprint inputs are unchanged."
+}

@@ -1,0 +1,310 @@
+{
+  "interpretation": {
+    "bug_scope": "Confirmed shared mutable event instances between same-process environments; demonstrated interleaving fault does not invalidate the sequential 3000-pair comparison. Unmeasured contribution to prior training results.",
+    "latest_frozen_strength_check": "123 to 130 clears in 3000 pairs, 4.10% to 4.33%, exact paired p=0.681; no established additional gain, equivalence, permanent plateau or regression.",
+    "remaining_scope": "Other simulator globals and native-game transfer remain unverified. User checkpoint is not available in the cloud. Public production positive-proof and fork workflows are covered by targeted fixtures; actual runtime uses a separate short policy and lower-level functions.",
+    "repair_claim": "Corrects private event-instance ownership, creates a separate backend identity, and retains policy/value/Adam/counter/seed high-water marks. Does not claim improved playing strength."
+  },
+  "local_corrected_ppo_runtime": {
+    "adam_exactly_restored": true,
+    "added_training_decisions": 1024,
+    "after": {
+      "aborted_rate": 0.0,
+      "episodes": 25,
+      "floor_samples": 25,
+      "hp_samples": 25,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 8.48,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 25,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 25,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        1.3877787807814457e-17,
+        0.13319225093904846
+      ]
+    },
+    "before": {
+      "aborted_rate": 0.0,
+      "episodes": 25,
+      "floor_samples": 25,
+      "hp_samples": 25,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 8.32,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 25,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 25,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        1.3877787807814457e-17,
+        0.13319225093904846
+      ]
+    },
+    "distinct_neow_instances": 4,
+    "event_wrapper_sha256": "cdab890a7c063767bc71d74d27f02dd85066764c285483753f66c3da055074a6",
+    "final_counter": 5120,
+    "finished_result_preserves_all_files": true,
+    "gameplay_evaluation_runs": 50,
+    "new_backend_fingerprint": "3082fb7e31a2adcb2dcd9abc91d2985b86eda95542a457139da70c15ad8859fe",
+    "note": "Actual SB3 PPO load, migration, four-environment corrected training, evaluation and completed-result cache on a separate short local policy. Public source-proof and positive cycle-init workflows are covered by fixtures, not claimed as exercised here. Operational verification only; no strength inference.",
+    "old_backend_fingerprint": "5f4cbafb2e42b136347c02ebc5ecfb0ef8274897f46e0e546f8e894d7ad5d075",
+    "original_learning_files_unchanged": true,
+    "policy_and_value_exactly_restored": true,
+    "policy_parameter_l2_change": 0.2304624617099762,
+    "public_proof_prerequisite_and_cycle_creation_exercised": false,
+    "public_spaces_unchanged": true,
+    "script_sha256": "f37933ec683b8233774af55c7002d4833603bca6283669e8f99ae56cd26ef199",
+    "source_counter": 4096,
+    "stage": "event_isolated_ppo_lower_level_runtime_check",
+    "training_elapsed_seconds": 2.135983385000145,
+    "training_record": {
+      "budget_boundary_discards": 4,
+      "interrupted_checkpoint_steps": [],
+      "latest_decisions": 5120,
+      "latest_remainder_within_rollout": 0,
+      "note": "Training policies change. Counts locate positive reward examples, not held-out strength. Collected decisions can include a discarded partial rollout after interruption.",
+      "other_abort_reasons": {},
+      "other_aborted_episodes": 0,
+      "rollout_size": 1024,
+      "session_statuses": {
+        "completed": 1
+      },
+      "status": "read",
+      "training_outcomes": {
+        "death": 10,
+        "timeout": 0,
+        "win": 0
+      }
+    },
+    "training_seed_indices_retained": true,
+    "user_policy_tested": false,
+    "wrapper_counts": [
+      {
+        "event_isolation": 1,
+        "potion_mask": 1
+      },
+      {
+        "event_isolation": 1,
+        "potion_mask": 1
+      },
+      {
+        "event_isolation": 1,
+        "potion_mask": 1
+      },
+      {
+        "event_isolation": 1,
+        "potion_mask": 1
+      }
+    ]
+  },
+  "local_corrected_ppo_runtime_sha256": "a6fba0d81c1df376c7b400e6acf932dbddae594967c6f8b45695ad2695c5d859",
+  "local_event_and_behavior_runtime": {
+    "behavior_audit_sha256": "780732dca1a36a486f84b28519806f0b5bd3cf30e7a1d9f1123c6f2dd67afbfc",
+    "behavior_runs": 15,
+    "event_checker_sha256": "2784a2513d716fc9fa3879fa8b87edf271fff0a52c9ccd5d4e6d5825fdc9eea5",
+    "event_wrapper_sha256": "cdab890a7c063767bc71d74d27f02dd85066764c285483753f66c3da055074a6",
+    "isolated": {
+      "aborted_rate": 0.0,
+      "episodes": 25,
+      "floor_samples": 25,
+      "hp_samples": 25,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 8.32,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 25,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 25,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        1.3877787807814457e-17,
+        0.13319225093904846
+      ]
+    },
+    "learning_files_unchanged": true,
+    "mechanics_proof": {
+      "global_registry_restored": true,
+      "neow_isolated": {
+        "interleaved_actual_reward": [
+          {
+            "action": "pick_relic_reward",
+            "relic_id": "LOST_COFFER"
+          }
+        ],
+        "matches_solo": true,
+        "seed42_offered_labels": [
+          "Lost Coffer",
+          "Precise Scissors",
+          "Silver Crucible"
+        ],
+        "shared_event_model": false,
+        "solo_expected_reward": [
+          {
+            "action": "pick_relic_reward",
+            "relic_id": "LOST_COFFER"
+          }
+        ]
+      },
+      "neow_original": {
+        "interleaved_actual_reward": [
+          {
+            "action": "pick_relic_reward",
+            "relic_id": "NEOWS_TORMENT"
+          }
+        ],
+        "matches_solo": false,
+        "seed42_offered_labels": [
+          "Lost Coffer",
+          "Precise Scissors",
+          "Silver Crucible"
+        ],
+        "shared_event_model": true,
+        "solo_expected_reward": [
+          {
+            "action": "pick_relic_reward",
+            "relic_id": "LOST_COFFER"
+          }
+        ]
+      },
+      "passed": true,
+      "tablet_isolated": {
+        "decision": 66,
+        "matches": true,
+        "max_hp_after": [
+          77,
+          77
+        ],
+        "max_hp_before": [
+          80,
+          80
+        ],
+        "shared_event_model": false
+      },
+      "tablet_original": {
+        "decision": 66,
+        "matches": false,
+        "max_hp_after": [
+          77,
+          74
+        ],
+        "max_hp_before": [
+          80,
+          80
+        ],
+        "shared_event_model": true
+      }
+    },
+    "note": "Separate short local policy. Actual same-weights gameplay, event ownership regressions and five behavioral controllers exercised without training. Public cached/source lineage workflows are covered separately by targeted fixtures.",
+    "observer_sha256": "caf0e4da009f1f111714d80fe1d4e8ffbdc1f40c23c6cb814d6a13214992d4d7",
+    "original": {
+      "aborted_rate": 0.0,
+      "episodes": 25,
+      "floor_samples": 25,
+      "hp_samples": 25,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 8.32,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 25,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 25,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        1.3877787807814457e-17,
+        0.13319225093904846
+      ]
+    },
+    "previous_behavior_counter": 3072,
+    "public_checker_full_workflow_exercised": false,
+    "same_policy_counter": 4096,
+    "same_policy_replay_runs": 50,
+    "stage": "event_repair_and_behavior_lower_level_runtime_check",
+    "user_policy_tested": false
+  },
+  "local_event_and_behavior_runtime_sha256": "e0e3ebbd768aa397076561af0d63ebf4ce7bad02c8a8056bcacf184f12e76580",
+  "production_defaults": {
+    "additional_decisions": 80000,
+    "automatic_budget_extension": false,
+    "automatic_champion_promotion": false,
+    "event_registry_count": 68,
+    "event_state_isolation": "private-registry-per-run-v1",
+    "expected_first_fresh_repair_validation_start": 7700,
+    "expected_first_fresh_training_validation_start": 7800,
+    "expected_source_counter_from_user": 323640,
+    "expected_uninterrupted_final_counter": 404536,
+    "frozen_repair_cycle": 2,
+    "frozen_repair_pairs": 100,
+    "matched_before_after_pairs": 1000,
+    "new_cycle": 1,
+    "new_series": "experiments/ironclad-a0-act1-event-isolated-cycles",
+    "schedule_note": "Prior diagnostic reservations move the next block forward; checked from recorded evidence.",
+    "source": "experiments/ironclad-a0-act1-cycles/cycle-0002"
+  },
+  "released_files_sha256": {
+    "docs/event-isolation.md": "50a97fcffecf742cec3825798bc6dbde8dd6146c7326927173fd84c9481db59b",
+    "scripts/audit_act1_cycle.py": "780732dca1a36a486f84b28519806f0b5bd3cf30e7a1d9f1123c6f2dd67afbfc",
+    "scripts/check_cycle_event_isolation.py": "2784a2513d716fc9fa3879fa8b87edf271fff0a52c9ccd5d4e6d5825fdc9eea5",
+    "scripts/cycle_audit_observer.py": "caf0e4da009f1f111714d80fe1d4e8ffbdc1f40c23c6cb814d6a13214992d4d7",
+    "scripts/isolated_act1_cycles.py": "f37933ec683b8233774af55c7002d4833603bca6283669e8f99ae56cd26ef199",
+    "src/spire2_rl/event_isolation.py": "cdab890a7c063767bc71d74d27f02dd85066764c285483753f66c3da055074a6",
+    "tests/test_act1_cycle_audit.py": "7ad65d2fbb898fd011178d6bd214ad3e87f4eae0c96af215310ece35bb5a777d",
+    "tests/test_cycle_event_check.py": "738fda5a4a79f46e2fb5c7821a37e24096b502c26f649e2202fd7e35f67807f6",
+    "tests/test_event_isolation.py": "af786fee652a6b2b98627c4e328b16b6c4b4cbb4107740f8b042e84834ba3429",
+    "tests/test_isolated_act1_cycles.py": "db7e7a603fa713e4982533125766b29844d13902707cba8914c216f200460ba9"
+  },
+  "stage": "event_state_isolation_and_bounded_ppo_release",
+  "test_counts": {
+    "tests/test_act1_cycle_audit.py": 24,
+    "tests/test_cycle_event_check.py": 16,
+    "tests/test_event_isolation.py": 15,
+    "tests/test_isolated_act1_cycles.py": 16
+  },
+  "test_scope": {
+    "checker_and_behavior": "Small persisted Torch fixtures and controlled model/environment APIs exercise frozen identity, fixed schedules, raw-statistics validation, cache, hybrid controller observations, and evidence preservation.",
+    "cycle_runner": "Real separate action/value tensors and Adam state in persisted fixtures; controlled serialized model/environment APIs and constant-delta paired comparator for speed. Covers public source-proof prerequisite, atomic fork, flat wrapper chain, fresh schedules, fixed-budget resume, actual-model counter validation, and cache/recovery. Actual SB3 PPO integration is tested separately below.",
+    "event_wrapper": "Real-engine Neow/Tablet counterexamples, unchanged sequential gameplay, fresh callbacks, exact delegation, and exception/nested registry restoration."
+  },
+  "tests_passed": 71,
+  "unchanged_fingerprinted_files_sha256": {
+    "scripts/act1_cycles.py": "89b5e36c50b43fc96ec6282399eb46a715924baebb5c786e88a02960e5af06d1",
+    "scripts/act1_rl_trial.py": "dba38366def90b94fcfa53efb30138aab4977158964b0fd802c4101c14729e96",
+    "scripts/check_act1_cycle.py": "a8c870301f58b37bfdb336b70f92ba4bca20e4fc4bfdde631db05acb50df14d7",
+    "scripts/check_act1_trial.py": "e56b872d9b2079c975c61954c2f5180bc53d0f26cf727b577a5c7ebb88186dbb",
+    "scripts/check_potion_failures.py": "c8010ad0437876319c6ce460729339bfd3fdcba3009285232090f233f7f4f459",
+    "scripts/continue_act1_rl.py": "653c097f3fe84754dc62b7639536bb3b28bc181ddeb4c5960336198657b225f6",
+    "scripts/learn_act1.py": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+    "scripts/selection_rl.py": "38602fc821ae09237068645826ec3ca51ede9d69778e402f3a8105a435e1aba4",
+    "src/spire2_rl/emulator.py": "0c36aaae2a49b0549be76ac64cccb2d2950ae778f5b197ab6c56708ea13c8d04",
+    "src/spire2_rl/experiment.py": "4211b8a8a512221e0228c0c3bab8e763fb297026fe4967682972d36bb8c6e1ba",
+    "src/spire2_rl/imitation.py": "777a3847a22c9b4dadb4583a779b5312845afb3ecd598951bebb2b2d69ec0696",
+    "src/spire2_rl/models.py": "35d51d667554a8dfd7af5f131b7b9d8a4beadd237ac0a370e9e1e2e1b277ec42",
+    "src/spire2_rl/potion_capacity.py": "c57ee2f210e89e3138bc92ab3a8229ad2ca681b0ec1dcf1186901b8c0e7ffa92",
+    "src/spire2_rl/runner.py": "545e34797972ef24db5e6e87659ecd00007881de66e24fc5fb8b2d0b7209009d",
+    "src/spire2_rl/selection.py": "c18eab3d2c60d349a8f87222c5a0deb1d640a70a9d43f83842fdc0efea2c828e",
+    "src/spire2_rl/study.py": "7a95a018790f75146f4eba54769fbb4111056f217621792855cc8c359eb3662d"
+  }
+}

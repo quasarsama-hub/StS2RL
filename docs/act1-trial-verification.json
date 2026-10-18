@@ -1,0 +1,183 @@
+{
+  "focused_tests_passed": 26,
+  "release_script_sha256": "dba38366def90b94fcfa53efb30138aab4977158964b0fd802c4101c14729e96",
+  "pilot_script_sha256": "b183edb443a403d55aff0b3bde01ccced364cfd106d67d3f71452b6458c5b955",
+  "pilot_ppo_steps": 80896,
+  "pilot_before": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 6.87,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "pilot_after": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 6.97,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "pilot_additional_rl_comparison": {
+    "baseline": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 6.87,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 7,
+    "candidate": {
+      "aborted_rate": 0.0,
+      "episodes": 100,
+      "floor_samples": 100,
+      "hp_samples": 100,
+      "incomplete_run_rate": 0.0,
+      "infrastructure_failure_rate": 0.0,
+      "mean_floor": 6.97,
+      "mean_hp": 0.0,
+      "outcomes": {
+        "aborted": 0,
+        "death": 100,
+        "timeout": 0,
+        "win": 0
+      },
+      "timeout_rate": 0.0,
+      "valid_game_runs": 100,
+      "win_rate": 0.0,
+      "win_rate_ci95": [
+        3.469446951953614e-18,
+        0.03699349820698568
+      ]
+    },
+    "eligible_pairs": 100,
+    "excluded_pairs": 0,
+    "excluded_seeds": [],
+    "floor_delta": 0.1,
+    "floor_delta_ci95": [
+      -0.75,
+      0.95
+    ],
+    "min_pairs": 100,
+    "pairs": 100,
+    "promote": false,
+    "promotion_rule": "No timeouts/aborts, sufficient clean pairs, and lower 95% win delta > 0; or lower 95% floor delta > 0 with lower 95% win delta >= 0.",
+    "reasons": [
+      "95% intervals do not establish the required improvement"
+    ],
+    "win_delta": 0.0,
+    "win_delta_ci95": [
+      0.0,
+      0.0
+    ]
+  },
+  "pilot_training_outcomes": {
+    "win": 0,
+    "death": 885
+  },
+  "release_check_ppo_steps": 1024,
+  "release_check_before": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 6.76,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "release_check_after": {
+    "aborted_rate": 0.0,
+    "episodes": 100,
+    "floor_samples": 100,
+    "hp_samples": 100,
+    "incomplete_run_rate": 0.0,
+    "infrastructure_failure_rate": 0.0,
+    "mean_floor": 6.53,
+    "mean_hp": 0.0,
+    "outcomes": {
+      "aborted": 0,
+      "death": 100,
+      "timeout": 0,
+      "win": 0
+    },
+    "timeout_rate": 0.0,
+    "valid_game_runs": 100,
+    "win_rate": 0.0,
+    "win_rate_ci95": [
+      3.469446951953614e-18,
+      0.03699349820698568
+    ]
+  },
+  "release_plan": {
+    "episodes": 100,
+    "target_steps": 1024,
+    "validation_start": 600
+  },
+  "source_files_unchanged": {
+    "learn_act1.py": "53bdf1e5447ecfe33de62355cc85487c54f99a5e2abfaa4e2743637db6da05d2",
+    "imitation.py": "777a3847a22c9b4dadb4583a779b5312845afb3ecd598951bebb2b2d69ec0696"
+  },
+  "note": "Operational trials here used an isolated copy of the local frozen clone, not the user checkpoint. The full pilot preceded the additional validation-seed-overlap guard; release bytes passed 26 tests and a subsequent complete 1024-step trial. The full pilot did not establish additional RL progress or produce Act 1 wins."
+}

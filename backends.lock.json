@@ -1,0 +1,16 @@
+{
+  "emulator": {
+    "url": "https://github.com/vvsuby/sts2-rl-agent.git",
+    "commit": "04a62c35b0ee264f5e4a3b5c6587f7438f1a7e0c",
+    "game_reference": "v0.106.1",
+    "parity": "unverified",
+    "license": "No explicit license; fetched separately and not redistributed."
+  },
+  "native": {
+    "url": "https://github.com/wuhao21/sts2-cli.git",
+    "commit": "084d1aa3d8e118ca7ce8d8774ad16d6be9c92367",
+    "license": "MIT",
+    "requires": "User-installed game assemblies and .NET 9 SDK",
+    "parity": "unverified"
+  }
+}
