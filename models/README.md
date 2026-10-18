@@ -1,9 +1,11 @@
 # Trained checkpoints
 
 `best.pt` is the value network from the development training run (`runs/main`), selected
-by evaluation score on seeds `EVAL000000–000063` and then re-measured on held-out seeds
-`EVAL001000+` (see `best.json`). It is a starting point, not a finished agent: continue
-training from it with
+by evaluation score on validation seeds `EVAL000000–000063` and then measured on held-out
+test seeds `EVAL001000+` (see `best.json`). It was trained before simulator patch 0006
+gave treasure chests their relic, so it has never seen a chest relic in training; it was
+re-measured with the patch (`best.json`, `results_patch0006`). It is a starting point,
+not a finished agent: continue training from it with
 
 ```bash
 mkdir -p runs/main && cp models/best.pt runs/main/latest.pt
@@ -14,7 +16,8 @@ or use it directly:
 
 ```bash
 python -m sts2rl.watch    --model models/best.pt --seed ANYSEED
-python -m sts2rl.evaluate --model models/best.pt --runs 200 --offset 1000
+python -m sts2rl.evaluate --model models/best.pt --runs 200 --split test
+python -m sts2rl.bridge.cli_eval --cli third_party/sts2-cli --model models/best.pt --runs 32
 python -m sts2rl.bridge.live --model models/best.pt --attach
 ```
 

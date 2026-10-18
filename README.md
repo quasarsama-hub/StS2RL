@@ -2,7 +2,8 @@
 
 An agent that learns to play **Slay the Spire 2** by playing itself in a fast, headless
 simulator of the game, gets measurably better with every training iteration, and can
-then play the real game through the STS2MCP mod.
+then play the real game — through the STS2MCP mod, or headless on the game's own engine
+through sts2-cli, hundreds of runs at a time.
 
 ```
             ┌──────────────── self-play (N worker processes) ────────────────┐
@@ -49,7 +50,7 @@ and play worse than the heuristic it was supposed to improve on.)
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
 captures, exact RNG, exact map generation). It's pinned as a git submodule; this repo
-carries five patches for it (`patches/sts2/`):
+carries six patches for it (`patches/sts2/`):
 
 | patch | what it does |
 |---|---|
@@ -58,9 +59,10 @@ carries five patches for it (`patches/sts2/`):
 | `0003-agent-exports-and-crash-guards` | Native heuristic combat rollouts (20× faster than driving them from Python), and engine exceptions reported as an error status instead of aborting the process. |
 | `0004-end-turn-flush-snapshot` | Fixes a crash ("Collection was modified") when an end-of-turn exhaust draws a card mid-flush (e.g. Dark Embrace + Ethereal); the drawn card is flushed instead of vanishing. |
 | `0005-golden-path-unknown-rooms` | Golden Compass's single-column map typed its "?" rooms as *no node*, which the map screen can't move onto, so every Golden Compass run got stuck on its second floor. |
+| `0006-treasure-chest-relic` | Treasure chests paid their gold but **never their relic**: the game's `treasure_room_relics` RNG stream and shared relic bag were built and cloned but never drawn from, so every simulated run was a relic or two short by mid-Act 1. Chests now offer their relic on the reward screen (rarity rolled on that stream, drawn from the shared bag). Checked against every chest in the recorded real-game runs: **9 of 9 offer exactly the relic the game offered** (Vajra, Red Mask, Oddly Smooth Stone, Stone Cracker, …). |
 
-The simulator's own test suite passes with all five patches applied (4,802 tests, including a
-regression test patch 5 adds).
+The simulator's own test suite passes with all six patches applied (4,805 tests, including
+regression tests patches 5 and 6 add).
 
 ## Results so far
 
@@ -115,7 +117,7 @@ bash setup.sh                       # submodule + patches + native build + .venv
 source .venv/bin/activate
 
 python -m sts2rl.evaluate --agent heuristic --runs 16     # smoke test
-python -m pytest tests -q                                  # 40 tests, ~30 s
+python -m pytest -q                                        # 57 tests, ~40 s
 python -m sts2rl.watch --model models/best.pt --seed ANYSEED   # the trained agent
 ```
 
@@ -128,10 +130,23 @@ it (see `models/README.md`) instead of starting over.
 python -m sts2rl.train --name main --workers $(nproc) --iterations 200
 ```
 
-Each iteration plays `--runs-per-iter` self-play runs, trains, then evaluates on 64 fixed
-seeds and keeps the best checkpoint. Everything goes to `runs/main/`
-(`metrics.jsonl`, `latest.pt`, `best.pt`, data shards). Stop it any time; the same command
-resumes.
+Each iteration plays `--runs-per-iter` self-play runs, trains, then evaluates on the
+**validation** seeds and puts the new checkpoint up against the current champion on those
+same seeds. It replaces the champion (`best.pt`) only if its run score is higher with
+p < 0.05 (paired sign-flip permutation test over seeds) *and* it clears no significantly
+fewer acts or wins (exact McNemar). A checkpoint that is merely not worse stays out — that
+is how noise becomes "the best checkpoint". Everything goes to `runs/main/`
+(`metrics.jsonl`, `latest.pt`, `best.pt`, `champion.json`, data shards). Stop it any
+time; the same command resumes.
+
+Seeds come in two disjoint splits: **validation** (`EVAL000000–000999`) is what training
+selects on; **test** (`EVAL001000+`) is never touched by training and is only for final
+numbers (`--split test`). Evaluation is deterministic per (checkpoint, seed, settings), so
+comparisons are paired:
+
+```bash
+python -m sts2rl.compare --a models/best.pt --b runs/main/best.pt --runs 200 --split test
+```
 
 It's CPU-bound (search), not GPU-bound: throughput scales with cores. Rough numbers:
 
@@ -148,6 +163,8 @@ Knobs that matter most:
 * `--sims` (combat simulations per move in self-play) and `--eval-sims`. More is stronger
   and slower; 24–64 for training, 100–400 for evaluation/live play.
 * `--runs-per-iter`: more data per iteration = steadier value estimates.
+* `--eval-runs`: the champion gate's sample size. 64 only detects big jumps; 200+ lets
+  smaller real improvements through.
 * `--max-act 1` to train on Act 1 only (the part of the simulator verified against the
   live game) before taking on the whole run.
 
@@ -155,7 +172,8 @@ Knobs that matter most:
 
 ```bash
 python -m sts2rl.report   runs/main                                     # learning curve
-python -m sts2rl.evaluate --model runs/main/best.pt --runs 200 --sims 128
+python -m sts2rl.evaluate --model runs/main/best.pt --runs 200 --sims 128 --split test
+python -m sts2rl.compare  --a heuristic --b runs/main/best.pt --runs 128 --split test
 python -m sts2rl.watch    --model runs/main/best.pt --seed ANYSEED     # see its reasoning
 python -m sts2rl.bench    --sims 0,32,100                               # combat-only benchmark
 ```
@@ -169,7 +187,7 @@ The bridge (`sts2rl/bridge/live.py`) drives the game through
 HTTP API. The simulator runs as a **shadow** of the real run: same seed, same character,
 same ascension, so the two stay in lockstep. The agent decides on the shadow exactly as
 it does in training and the bridge sends the game the matching command. After every
-step it compares the game with the shadow — floor, HP, gold, hand, enemy HP — and
+step it compares the game with the shadow — floor, HP, gold, relics, hand, enemy HP — and
 **stops the moment they disagree**, because a diverged simulator would mislead the agent.
 
 **On Windows:** run everything (training and the bridge) inside WSL2 (Ubuntu), and let WSL
@@ -208,6 +226,51 @@ command the real game received **every time**. The live HTTP loop itself reuses 
 simulator project's capture driver, which recorded those runs. What has *not* been
 exercised yet is shop purchases and multi-card selection screens against the live game.
 
+## Testing on the real game engine, headless (sts2-cli)
+
+[sts2-cli](https://github.com/wuhao21/sts2-cli) (MIT) runs **your installed game's own
+code** — it copies `sts2.dll` out of your Steam folder, patches the copy to run without
+Godot, and plays a run over stdin/stdout. No window, no mod, no clicking, so the agent can
+play hundreds of real-engine runs unattended. sts2-cli can't fork a run, so the simulator
+rides along as a lockstep shadow exactly as in the live bridge: every screen is matched,
+the shadow steps through what the engine resolves by itself (gold/relic/potion pickups,
+chests, "proceed" pages), and after every step HP, gold, floor, deck, relics, potions, the
+hand, energy and every enemy's HP are compared.
+
+That makes it two tools in one:
+
+* **A fidelity test of the simulator against the game you own.** The first disagreement on
+  each seed ends that run with its exact floor and reason ("enemy hp: game=[12] sim=[18]")
+  and a full trace. That is precisely the evidence needed to fix the simulator.
+* **Real-engine results.** Seeds and agent settings match `sts2rl.evaluate`, so each run is
+  the twin of a simulator run, and a run that stays in sync to the end finishes exactly
+  where the simulator said it would (checked: 16 of 16 seeds identical against the
+  stand-in engine below).
+
+```bash
+bash scripts/setup_sts2cli.sh            # finds the game (WSL: /mnt/c/Program Files (x86)/Steam/...),
+                                         # or pass its folder as the first argument
+python -m sts2rl.bridge.cli_eval --cli third_party/sts2-cli --agent heuristic --runs 4 --sims 16
+python -m sts2rl.bridge.cli_eval --cli third_party/sts2-cli --model models/best.pt --runs 32 --split test
+```
+
+Each sts2-cli revision is written against one game build. The setup script tries two
+pinned revisions — `d11aa88` (for v0.106.1) and `084d1aa` (for v0.111.0 beta); the public
+v0.107.1 sits between them — and keeps the first that builds against your game *and*
+opens a run exactly as the simulator does (`python -m sts2rl.bridge.cli --smoke`). Output
+lands in `runs/cli/<timestamp>/`: one JSONL trace per seed and `summary.json`.
+
+**How it's been tested:** not yet against the real engine — there is no game install where
+this was written. It was tested against `tests/fake_sts2cli.py`, a simulator-backed
+stand-in that speaks sts2-cli's protocol and keeps its habits (taken from sts2-cli's
+source): 80 full runs in sync from Neow to the end, through act transitions, shops,
+events, rest sites and multi-card selections, and a deliberately injected 1-HP error is
+caught on the floor it appears. Known gaps, all reported as desyncs rather than silently
+absorbed: sts2-cli shows only the first card reward of a fight (the shadow skips the rest
+too); Act 3's ancients aren't in the simulator; and the simulator's observation shows only
+the first 10 cards of a bigger selection screen (picks beyond them are matched by position
+alone).
+
 ## Limitations, honestly
 
 * **Act 1 is verified against the live game; Acts 2–3 are modelled from the decompiled
@@ -238,8 +301,9 @@ In rough order of expected payoff:
 3. **Deeper search where it matters.** Bosses already get 4× the simulations; live play
    defaults to 200 per move. Evaluation is cheap to run at 400+.
 4. **Simulator coverage.** Every Act 2–3 divergence fixed upstream (or by a patch here)
-   makes the agent's later-act play transfer better to the real game. The bridge's
-   desync log (`runs/live/*.jsonl`) is exactly the evidence needed to find them.
+   makes the agent's later-act play transfer better to the real game. The sts2-cli
+   bench's traces (`runs/cli/*/`) and the live bridge's desync log (`runs/live/*.jsonl`)
+   are exactly the evidence needed to find them.
 
 ## Layout
 
@@ -257,12 +321,17 @@ sts2rl/
   selfplay.py            crash-tolerant multi-process self-play
   dataset.py             replay buffer + TD(lambda) targets
   train.py               the improvement loop
-  evaluate.py            fixed-seed evaluation with confidence intervals
+  evaluate.py            fixed-seed evaluation (validation / test splits)
+  stats.py               paired statistics: McNemar, permutation test, the champion gate
+  compare.py             paired comparison of two agents on the same seeds
   report.py              learning curve from a training run
   watch.py               narrated single run
   bench.py               combat benchmark on hard fights
   bridge/live.py         real-game play through STS2MCP with a shadow simulator
-tests/                   unit tests + real-game-trace bridge tests
+  bridge/cli.py          real-engine play through sts2-cli with a shadow simulator
+  bridge/cli_eval.py     batch real-engine evaluation: fidelity + results
+scripts/setup_sts2cli.sh fetch, patch and build sts2-cli against your game
+tests/                   unit tests, real-game-trace bridge tests, sts2-cli bench tests
 models/                  trained checkpoint (best.pt) and its held-out evaluation
 results/                 records of the development training run (curve, logs, data)
 ```
@@ -271,5 +340,6 @@ results/                 records of the development training run (curve, logs, d
 
 The simulator is [evangambit/sts2](https://github.com/evangambit/sts2), forked from
 [Zamiell/slay-the-spire-2-emulator](https://github.com/Zamiell/slay-the-spire-2-emulator)
-(both MIT). The game bridge builds on [STS2MCP](https://github.com/Gennadiyev/STS2MCP) (MIT).
+(both MIT). The game bridge builds on [STS2MCP](https://github.com/Gennadiyev/STS2MCP) (MIT); the
+headless real-engine bench on [sts2-cli](https://github.com/wuhao21/sts2-cli) (MIT).
 Slay the Spire 2 is © Mega Crit; this project is unaffiliated and for personal/research use.
