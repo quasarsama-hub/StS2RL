@@ -42,7 +42,13 @@ PHASE_TRANSFORM_SELECT = 9
 PHASE_TREASURE = 10
 SHOP_REMOVE = 13
 SHOP_LEAVE = 14
+EVENT_SKIP = 3  # the simulator's "walk away from the event"; the game has no such button
+REWARD_FOURTH_CARD = 5  # Lasting Candy's extra card; 4 (Pael's Wing) and 6 (reroll) have no command
+# A8 carries Weary Traveler: the heal entering an act is 80% of the missing HP, rounded
+# down (a capture: 264/280 -> 276). sts2-cli applies it as soon as the boss dies.
+BETWEEN_ACT_HEAL = 0.8
 COMBAT_ROOMS = {"Monster", "Elite", "Boss"}
+KNOWN_SCREENS = {"combat_play", "card_select", "card_reward", "map_select", "rest_site", "shop", "event_choice", "bundle_select", "game_over"}
 AUTO_LIMIT = 32  # non-decision steps in a row before the shadow is declared lost
 MAX_PICKS = 10
 PHASE_NAMES = {
@@ -102,6 +108,21 @@ def card_entry(cid: int) -> str:
     return (c.entry or _snake_upper(c.name)) if c else f"CARD_{cid}"
 
 
+@cache
+def event_entry_by_id() -> dict[int, str]:
+    """Simulator event id -> the game's event entry ("UNREST_SITE"), from the simulator's
+    generated option table (events whose options are built at run time are not in it)."""
+    from .. import paths
+
+    text = (paths.GENERATED / "EventOptions.g.cs").read_text(encoding="utf-8")
+    # "19 => 3,  // has a locked variant   // WoodCarvings": the name is the last comment.
+    return {int(i): _snake_upper(name) for i, name in re.findall(r"(\d+) => \d+,.*// (\w+)\s*$", text, re.M)}
+
+
+def _strip_bbcode(text: str) -> str:
+    return re.sub(r"\[/?[a-zA-Z_][a-zA-Z0-9_=]*\]", "", text)
+
+
 class Names:
     """Simulator id -> the title sts2-cli prints, read from sts2-cli's localization."""
 
@@ -114,7 +135,7 @@ class Names:
     def _title(self, table: str, entry: str) -> str:
         # sts2-cli's own fallback for a missing key is the key itself.
         key = f"{entry}.title"
-        return self.tables[table].get(key, key)
+        return _strip_bbcode(self.tables[table].get(key, key))  # as sts2-cli's Bilingual()
 
     def card(self, cid: int) -> str:
         return self._title("cards", card_entry(cid))
@@ -158,7 +179,11 @@ class CliGame:
         )
         self._lines: queue.Queue = queue.Queue()
         threading.Thread(target=self._pump, daemon=True).start()
-        ready = self._read()
+        try:
+            ready = self._read()
+        except BaseException:
+            self.close()
+            raise
         if ready.get("type") != "ready":
             self.close()
             raise CliError(f"sts2-cli did not start: {ready}")
@@ -274,18 +299,22 @@ def same_card(a: tuple, b: tuple) -> bool:
     return a[0] == b[0] and (a[1] is None or b[1] is None or a[1] == b[1])
 
 
-def rekey(positions: list[int], options: dict) -> list[tuple[int, int]] | None:
-    """Pair the cards still selectable, in order, with the engine positions not yet taken.
+def follow_deck(before: list, after: list, picked: int) -> dict[int, int] | None:
+    """Where each card of `before` (other than the one at `picked`) sits in `after`.
 
-    The simulator applies each pick at once -- a removed card leaves the deck and the
-    indices after it shift, a taken candidate leaves its list -- while the engine's
-    indices keep naming the list as first shown. Order is preserved, so the k-th card
-    still on offer is the k-th position not yet picked.
+    The simulator applies a deck selection one pick at a time: the picked card is removed
+    (removal), removed with its replacement appended at the end (transform), changed in
+    place (upgrade, enchant, Claws), or left where it was with a copy appended (duplicate).
+    Every other card keeps its order. Returns None for any other change.
     """
-    items = sorted(options.items())
-    if len(items) != len(positions):
-        return None
-    return [(a, pos) for (a, _), pos in zip(items, positions)]
+    rest = before[:picked] + before[picked + 1 :]
+    shift = {i: i - (i > picked) for i in range(len(before)) if i != picked}
+    same = {i: i for i in range(len(before)) if i != picked}
+    if after == rest or (len(after) == len(before) and after[:-1] == rest):
+        return shift  # removed, or removed and its replacement appended
+    if len(after) >= len(before) and all(after[i] == before[i] for i in same):
+        return same  # changed in place, possibly with a card appended
+    return None
 
 
 def shadow_matches(decision: str, run: sim.Run) -> bool:
@@ -303,6 +332,12 @@ def shadow_matches(decision: str, run: sim.Run) -> bool:
         "bundle_select": ph == PHASE_BUNDLE_SELECT,
         "game_over": ph == sim.PHASE_COMPLETE,
     }.get(decision, False)
+
+
+def at_act_start(run: sim.Run) -> bool:
+    """On the map of an act after the first, before stepping onto its ancient."""
+    nodes = [c for c in run.map_choice_coords() if c is not None]
+    return run.phase == sim.PHASE_MAP and F.ACT_ORDINAL.get(run.act_id, 1) > 1 and len(nodes) == 1 and nodes[0][1] == 0
 
 
 def describe(run: sim.Run) -> str:
@@ -333,7 +368,10 @@ class CliRunResult:
     desync_floor: int | None = None
     desync_reason: str = ""
     engine_error: str = ""
+    bench_error: str = ""  # a bug in the bench or the agent, not a verdict on the simulator
     decisions: int = 0
+    restricted: int = 0  # decisions where the agent's first choice has no engine command
+    forfeits: int = 0  # extra card rewards / rest options sts2-cli discards, discarded on the shadow too
     auto_steps: int = 0
     seconds: float = 0.0
 
@@ -352,6 +390,8 @@ class CliSession:
     max_decisions: int = 20000
     shadow: sim.Run | None = None
     floor_offset: dict = field(default_factory=dict)  # act -> shadow floor minus engine floor
+    room: dict = field(default_factory=dict)  # what the engine has shown since the last map screen
+    forfeits: int = 0
     _trace: object = None
 
     # -- bookkeeping -------------------------------------------------------------------
@@ -386,11 +426,21 @@ class CliSession:
                 if state.get("type") == "error":
                     raise CliError(state.get("message", "error"))
                 decision = state.get("decision")
+                if decision not in KNOWN_SCREENS:
+                    # sts2-cli itself is lost (its fallback 'unknown' screen), not the shadow.
+                    raise CliError(f"engine shows {decision!r}: {state.get('message') or state.get('room_type')}")
                 result.auto_steps += self.advance_shadow(state)
+                if decision == "map_select":
+                    self.room = {}
+                elif decision in ("card_reward", "rest_site"):
+                    self.room[decision] = self.room.get(decision, 0) + 1
+                if self.agent._past_last_act(self.shadow):
+                    result.finished = True  # the act cap: the next act is not played
+                    break
                 diffs = self.compare(state)
                 if diffs:
                     raise Desync("; ".join(diffs))
-                if decision == "game_over" or self.agent._past_last_act(self.shadow):
+                if decision == "game_over":
                     result.finished = True
                     break
                 move = self.decide(state)
@@ -411,8 +461,16 @@ class CliSession:
             result.in_sync = False
             result.engine_error = f"{type(exc).__name__}: {exc}"
             self.log(kind="error", reason=result.engine_error)
+        except Exception as exc:
+            import traceback
+
+            result.in_sync = False
+            result.bench_error = f"{type(exc).__name__}: {exc}"
+            self.log(kind="bench_error", reason=result.bench_error, traceback=traceback.format_exc())
         finally:
             run = self.shadow
+            result.restricted = int(self.agent.stats.get("restricted", 0))
+            result.forfeits = self.forfeits
             result.final_floor = run.floor
             capped = self.agent._past_last_act(run)
             result.won = result.finished and (capped or (run.done and run.won() and run.hp > 0))
@@ -443,22 +501,44 @@ class CliSession:
         run = self.shadow
         legal = [int(a) for a in run.legal()]
         if run.phase == sim.PHASE_RELIC_REWARD:
-            # sts2-cli takes gold, then relics, then potions by itself (a potion with the
-            # belt full is lost, in both), and shows a card reward as a screen of its own.
-            # It shows only the first card reward of a fight, so any further one is left
-            # on the shadow's screen too.
+            # sts2-cli takes gold, potions and relics by itself, in the order of the
+            # rewards (the screen's order; a potion with the belt full is lost, in both),
+            # and shows a card reward as a screen of its own. It shows only the first card
+            # reward of a fight, so any further one is left on the shadow's screen too.
             gold, potion, relic, cards = run.state_list(6, 4)
             items = ["gold"] * bool(gold) + ["potion"] * bool(potion) + ["relic"] * bool(relic) + ["card"] * int(cards)
-            wanted = ["gold", "relic", "potion"] + (["card"] if decision == "card_reward" else [])
-            for item in wanted:
-                if item in items and items.index(item) in legal:
-                    return items.index(item)
+            for index, item in enumerate(items):
+                if (item != "card" or decision == "card_reward") and index in legal:
+                    return index
+            if "card" in items:
+                self._forfeit("card reward")
             return REWARD_SKIP
         if run.phase == PHASE_TREASURE and REWARD_SKIP in legal:
             return REWARD_SKIP
+        if run.phase == sim.PHASE_CARD_REWARD and REWARD_SKIP in legal:
+            self._forfeit("card reward")  # Prayer Wheel / White Star's extra one
+            return REWARD_SKIP
+        if run.phase == sim.PHASE_REST and REWARD_SKIP in legal and len(legal) > 1:
+            self._forfeit("rest site")  # Miniature Tent's second option
+            return REWARD_SKIP
+        if len(legal) == 1 and run.phase == sim.PHASE_COMBAT and run.pending_selection() > 0:
+            # A selection with one forced pick, which sts2-cli makes without a screen.
+            # Asked of the agent all the same, so its search draws what it would have.
+            action, _ = self.agent.act(run)
+            return action
         if len(legal) == 1 and run.phase != sim.PHASE_COMBAT:
             return legal[0]  # a proceed page: nothing to decide
         raise Desync(f"engine shows {decision}; simulator is on {describe(run)} with {len(legal)} options")
+
+    def _forfeit(self, screen: str) -> None:
+        """sts2-cli shows a room's first card reward and first rest option only, and moves
+        on; the shadow gives up the rest the same way. Before that first one, though, a
+        screen the engine never showed is a real divergence."""
+        key = {"card reward": "card_reward", "rest site": "rest_site"}[screen]
+        if not self.room.get(key):
+            raise Desync(f"the simulator has a {screen} the engine never showed ({describe(self.shadow)})")
+        self.forfeits += 1
+        self.log(kind="forfeit", screen=screen, floor=self.shadow.floor)
 
     # -- the sync check ----------------------------------------------------------------
 
@@ -478,7 +558,12 @@ class CliSession:
             check("victory", bool(state.get("victory")), bool(run.won() and run.hp > 0))
             return diffs
         # In combat the run-level hp, max hp and gold are the fight's own (WriteObservation).
-        check("hp", player.get("hp"), run.hp)
+        if decision == "map_select" and self.at_act_start():
+            # sts2-cli heals the moment the boss dies; the shadow heals on stepping onto
+            # the act's ancient, one move from here.
+            check("hp (between-act heal)", player.get("hp"), run.hp + int((run.max_hp - run.hp) * BETWEEN_ACT_HEAL))
+        else:
+            check("hp", player.get("hp"), run.hp)
         check("max hp", player.get("max_hp"), run.max_hp)
         check("gold", player.get("gold"), run.gold)
         act = ctx.get("act")
@@ -488,25 +573,27 @@ class CliSession:
                 offset = self.floor_offset.setdefault(int(act), run.floor - int(ctx["floor"]))
                 check("floor", int(ctx["floor"]) + offset, run.floor)
         if not in_combat and "deck" in player:
-            game_deck = Counter((card_id(c.get("id", "")), bool(c.get("upgraded"))) for c in player["deck"])
-            sim_deck = Counter((int(c[0]), bool(c[1])) for c in run.deck())
+            # Whether a card is enchanted is compared, not with what (no shared name table).
+            game_deck = Counter((card_id(c.get("id", "")), bool(c.get("upgraded")), bool(c.get("enchantment"))) for c in player["deck"])
+            sim_deck = Counter((int(c[0]), bool(c[1]), bool(c[2])) for c in run.deck())
             if game_deck != sim_deck:
                 extra = game_deck - sim_deck
                 missing = sim_deck - game_deck
-                diffs.append(
-                    "deck: game has " + ", ".join(f"{gd.card_name(c)}{'+' if u else ''}" for c, u in extra.elements())
-                    + " / sim has " + ", ".join(f"{gd.card_name(c)}{'+' if u else ''}" for c, u in missing.elements())
-                )
+                def card_list(cards):
+                    return ", ".join(f"{gd.card_name(c)}{'+' if u else ''}{' (enchanted)' if e else ''}" for c, u, e in cards.elements())
+
+                diffs.append(f"deck: game has {card_list(extra)} / sim has {card_list(missing)}")
         if "relics" in player:
             game_relics = Counter(r.get("name") for r in player["relics"] or [])
             sim_relics = Counter(self.names.relic(int(r[0])) for r in run.relics())
             if game_relics != sim_relics:
                 diffs.append(f"relics: game has {sorted((game_relics - sim_relics).elements())} / sim has {sorted((sim_relics - game_relics).elements())}")
         if "potions" in player:
-            game_pots = {int(p["index"]): p.get("name") for p in player["potions"] or [] if p}
+            # The game's Player.Potions skips empty slots, so sts2-cli lists (and indexes)
+            # the potions held, in belt order -- not the slots.
+            game_pots = [p.get("name") for p in sorted(player["potions"] or [], key=lambda p: int(p["index"])) if p]
             pots = run.combat_potions() if in_combat else list(run.potions())
-            sim_pots = {i: self.names.potion(p) for i, p in enumerate(pots) if p}
-            check("potions", game_pots, sim_pots)
+            check("potions", game_pots, [self.names.potion(p) for p in pots if p])
         if decision == "combat_play":
             game_hand = Counter(card_id(c.get("id", "")) for c in state.get("hand") or [])
             sim_hand = Counter(c for c, _ in run.hand())
@@ -521,7 +608,7 @@ class CliSession:
             sim_nodes = {c for c in run.map_choice_coords() if c is not None}
             # Before an act's first move the engine lists the start node AND its children;
             # the simulator offers only the start node (the act's ancient).
-            if sim_nodes != game_nodes and not (len(sim_nodes) == 1 and sim_nodes <= game_nodes):
+            if sim_nodes != game_nodes and not (self.at_act_start() and sim_nodes <= game_nodes):
                 diffs.append(f"map choices: game={sorted(game_nodes)} sim={sorted(sim_nodes)}")
         elif decision == "card_reward":
             # Lasting Candy's fourth card lives elsewhere in the observation; the three
@@ -542,6 +629,12 @@ class CliSession:
             )
             if game_stock != sim_stock:
                 diffs.append(f"shop stock: game has {sorted((game_stock - sim_stock).elements())} / sim has {sorted((sim_stock - game_stock).elements())}")
+        elif decision == "event_choice" and run.phase == sim.PHASE_EVENT:
+            keys = [o.get("text_key") or "" for o in state.get("options") or []]
+            game_event = keys[0].split(".", 1)[0].upper() if keys and "." in keys[0] else None
+            sim_event = event_entry_by_id().get(run.event_id)
+            if game_event and sim_event and game_event != sim_event:
+                diffs.append(f"event: game={game_event} sim={sim_event}")
         elif decision == "event_choice" and run.phase == sim.PHASE_ANCIENT:
             offered = [entry_of(o.get("text_key") or "") for o in state.get("options") or []]
             sim_ids = [r for r in run.state_list(3, 3) if r]
@@ -551,6 +644,9 @@ class CliSession:
                 diffs.append(f"ancient offers: game={offered} sim={sim_offered}")
         return diffs
 
+    def at_act_start(self) -> bool:
+        return at_act_start(self.shadow)
+
     # -- decisions ---------------------------------------------------------------------
 
     def decide(self, state: dict) -> Move:
@@ -558,7 +654,10 @@ class CliSession:
         run = self.shadow
         if decision == "card_select":
             return self._card_select(state)
-        action, target = self.agent.act(run)
+        allowed = self._expressible(decision, state)
+        if allowed is not None and not allowed:
+            raise Desync(f"none of the simulator's moves on {describe(run)} exists on the engine's {decision} screen")
+        action, target = self.agent.act(run, allowed=allowed)
         self.log(kind="decision", decision=decision, action=action, target=target)
         if decision == "combat_play":
             return self._combat(action, target, state)
@@ -571,6 +670,8 @@ class CliSession:
         if decision == "card_reward":
             if action == REWARD_SKIP:
                 return Move([("skip_card_reward", {})], [(action, -1)])
+            if action == REWARD_FOURTH_CARD:
+                return Move([("select_card_reward", {"card_index": 3})], [(action, -1)])
             cards = state.get("cards") or []
             mine = int(run.obs[sim.C + 9 + action]) if action < 3 else 0
             if action >= len(cards) or card_id(cards[action].get("id", "")) != mine:
@@ -596,6 +697,29 @@ class CliSession:
             return Move([("select_bundle", {"bundle_index": action})], [(action, -1), (BUNDLE_CONFIRM, -1)])
         raise Desync(f"no mapping for the engine's {decision!r} screen")
 
+    def _expressible(self, decision: str, state: dict) -> list[int] | None:
+        """The shadow's legal moves that have an engine command on this screen (None: all).
+
+        The simulator offers a few moves the game does not: walking away from an event
+        without choosing, rerolling or sacrificing a card reward. Choosing one would be a
+        false desync, so they are left out -- the agent then picks from what the player
+        could really do.
+        """
+        run = self.shadow
+        legal = [int(a) for a in run.legal()]
+        if decision == "event_choice":
+            options = state.get("options") or []
+            open_ = {i for i, o in enumerate(options) if not o.get("is_locked")}
+            skip = EVENT_SKIP if run.phase == sim.PHASE_EVENT else None
+            return [a for a in legal if a in open_ and a != skip]
+        if decision == "card_reward":
+            n = len(state.get("cards") or [])
+            return [a for a in legal if a < min(n, 3) or a == REWARD_SKIP or (a == REWARD_FOURTH_CARD and n >= 4)]
+        if decision == "rest_site":
+            offered = {str(o.get("option_id", "")).upper() for o in state.get("options") or [] if o.get("is_enabled", True)}
+            return [a for a in legal if a == REWARD_SKIP or offered & set(REST_IDS.get(a, ()))]
+        return None
+
     def _combat(self, action: int, target: int, state: dict) -> Move:
         run = self.shadow
         hand = run.hand()
@@ -612,7 +736,8 @@ class CliSession:
         if action == len(hand):
             return Move([("end_turn", {})], [(action, target)])
         slot = action - len(hand) - 1
-        args = {"potion_index": slot}
+        # sts2-cli indexes the potions held (Player.Potions skips empty slots), not slots.
+        args = {"potion_index": sum(1 for p in run.combat_potions()[:slot] if p)}
         if ordinal is not None:
             args["target_index"] = ordinal
         return Move([("use_potion", args)], [(action, target)])
@@ -629,24 +754,31 @@ class CliSession:
             kind, items, title, verb, key = "relic", state.get("relics"), self.names.relic(run.state_list(9, 3)[action - 7]), "buy_relic", "relic_index"
         else:
             kind, items, title, verb, key = "potion", state.get("potions"), self.names.potion(run.state_list(10, 3)[action - 10]), "buy_potion", "potion_index"
-        for item in items or []:
-            if item.get("is_stocked") and item.get("name") == title:
-                return Move([(verb, {key: int(item["index"])})], [(action, -1)])
+        shelf = action if action < 7 else action - 7 if action < 10 else action - 10
+        # Both keep shelf order, so the same position is the same item; the title is the
+        # check. (By title alone, two copies at different prices could be confused.)
+        stocked = [i for i in items or [] if i.get("is_stocked") and i.get("name") == title]
+        for item in sorted(stocked, key=lambda i: int(i["index"]) != shelf):
+            return Move([(verb, {key: int(item["index"])})], [(action, -1)])
         raise Desync(f"shop {kind} {title!r} (slot {action}) is not stocked by the engine")
 
     def _card_select(self, state: dict) -> Move:
         """Choose cards on an open selection -- possibly several, one simulator step each
         -- and send them to the engine in one `select_cards`. The shadow is stepped here.
 
-        Three simulator screens answer the engine's one: an in-combat selection (actions
-        index its candidate list; one past the end declines), a grid of offered cards
-        (likewise), and a selection over the deck (actions are deck indices). A pick is
-        matched to the engine's list by the card itself, never by position alone.
+        The engine's indices name its list as first shown. Picks are matched to it by
+        POSITION (which copy of a duplicated card is taken matters for pile order) and the
+        card itself is checked at every step. The simulator's side moves as it goes: an
+        in-combat selection or a grid of offered cards shrinks as cards are taken, and a
+        selection over the deck changes the deck itself (see `follow_deck`). Only cards
+        still on the engine's list are offered to the agent -- never one the simulator
+        made along the way, like a transform's replacement.
         """
         run = self.shadow
         game_cards = [(card_id(c.get("id", "")), bool(c.get("upgraded"))) for c in state.get("cards") or []]
         max_select = max(1, int(state.get("max_select") or 1))
         in_combat = run.phase == sim.PHASE_COMBAT
+        deck_mode = not in_combat and not offer_cards(run)
         offered = selection_options(run)
         listed = [card for _, card in sorted(offered.items())]
         if len(listed) != len(game_cards) or not all(same_card(a, b) for a, b in zip(listed, game_cards)):
@@ -654,14 +786,8 @@ class CliSession:
                 f"selection: game offers {[gd.card_name(c) for c, _ in game_cards]} "
                 f"sim offers {[gd.card_name(c) if c else '?' for c, _ in listed]}"
             )
-        # A pick is matched by POSITION -- which copy of a duplicated card is taken
-        # matters (pile order) -- and the card itself is checked at every step.
-        slots = rekey(list(range(len(game_cards))), offered)
-
-        # The picks are made on the shadow itself, one step at a time, and the engine gets
-        # them all at once. (Not on a copy: a copy of an open multi-card selection loses
-        # whether the player may stop early.)
-        picks: list[int] = []  # positions in the engine's list
+        where = {pos: a for pos, (a, _) in enumerate(sorted(offered.items()))}  # engine position -> sim action
+        picks: list[int] = []
         steps: list[tuple[int, int]] = []
         signature = (run.phase, tuple(run.state_list(20, 3)))
 
@@ -670,28 +796,46 @@ class CliSession:
                 return run.phase == sim.PHASE_COMBAT and run.pending_selection() > 0
             return (run.phase, tuple(run.state_list(20, 3))) == signature
 
-        while len(steps) < MAX_PICKS:
+        def deck_now() -> list[tuple[int, bool]]:
+            return [(int(c[0]), bool(c[1])) for c in run.deck()]
+
+        while True:
+            if len(steps) >= MAX_PICKS:
+                raise RuntimeError(f"selection still open after {MAX_PICKS} steps")
             before = selection_options(run)
-            action, _ = self.agent.act(run)
+            legal = [int(a) for a in run.legal()]
+            # Cards still on the engine's list, plus the shadow's done/decline actions.
+            allowed = [a for a in legal if a in where.values()] + [a for a in legal if a not in before]
+            action, _ = self.agent.act(run, allowed=None if in_combat else allowed)
             card = before.get(action)
+            position = next((pos for pos, a in where.items() if a == action), None)
             if card is not None:
-                position = dict(slots)[action]
+                if position is None:
+                    raise Desync(f"the agent picked {gd.card_name(card[0])}, which is not on the engine's selection screen")
                 if not same_card(game_cards[position], card):
                     raise Desync(f"selection slot {position}: game has {gd.card_name(game_cards[position][0])}, sim picks {gd.card_name(card[0])}")
                 picks.append(position)
+                del where[position]
+            deck_before = deck_now() if deck_mode else None
             steps.append((action, -1))
             if not run.step(action):
                 raise Desync(f"the simulator refused selection {action}")
             if card is None or not still_open():
                 break  # declined, finished early, or the screen closed itself
             after = selection_options(run)
-            slots = rekey([pos for _, pos in slots if pos not in picks], after)
-            if slots is None or not all(same_card(game_cards[pos], after[a]) for a, pos in slots):
-                left = [gd.card_name(game_cards[pos][0]) for pos in range(len(game_cards)) if pos not in picks]
-                raise Desync(
-                    f"selection: after taking {[gd.card_name(game_cards[p][0]) for p in picks]} the engine has "
-                    f"{left} left, the simulator {[gd.card_name(c) if c else '?' for _, (c, _) in sorted(after.items())]}"
-                )
+            if deck_mode:
+                moved = follow_deck(deck_before, deck_now(), action)
+                if moved is None:
+                    raise Desync("selection: the simulator changed the deck in a way the bench cannot follow")
+                where = {pos: moved[a] for pos, a in where.items()}
+            elif len(after) == len(before) - 1:
+                # The taken card left the list; everything after it moved up one.
+                where = {pos: a - (a > action) for pos, a in where.items()}
+            else:
+                raise Desync(f"selection: {len(before)} candidates became {len(after)} after one pick")
+            for pos, a in where.items():
+                if a not in after or not same_card(game_cards[pos], after[a]):
+                    raise Desync(f"selection: after {len(picks)} picks the engine's card {pos} ({gd.card_name(game_cards[pos][0])}) is no longer where the simulator has it")
             if len(picks) >= max_select:
                 # The engine resolves on its last allowed pick; the shadow's screen
                 # closes the same way, through its done/decline action.

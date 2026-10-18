@@ -49,7 +49,7 @@ def _play(task: dict) -> dict:
     seed = task["seed"]
     try:
         with cli.CliGame(task["command"], cwd=task["cwd"], timeout=task["timeout"], stderr_path=out / f"{seed}.stderr.log") as game:
-            result = cli.CliSession(game, agent, cli.Names(task["loc"]), seed, trace_path=out / f"{seed}.jsonl").play()
+            result = cli.CliSession(game, agent, cli.Names(task["loc"]), seed, ascension=task["ascension"], trace_path=out / f"{seed}.jsonl").play()
         return result.to_dict()
     except Exception as exc:  # sts2-cli would not start, or died outright
         return cli.CliRunResult(seed=seed, in_sync=False, engine_error=f"{type(exc).__name__}: {exc}").to_dict()
@@ -67,27 +67,40 @@ def reason_kind(reason: str) -> str:
 
 
 def summarize(rows: list[dict], max_act: int) -> dict:
+    """Fidelity, then outcomes -- each outcome counted only over the runs whose shadow was
+    still in sync when it was decided. (Counting only runs in sync to the very end would
+    favour short runs: a run that dies early has less road on which to desync.)"""
     n = len(rows)
-    errors = [r for r in rows if r["engine_error"]]
-    desyncs = [r for r in rows if not r["in_sync"] and not r["engine_error"]]
-    synced = [r for r in rows if r["in_sync"] and r["finished"]]
-    k = len(synced)
-    wins = sum(r["won"] for r in synced)
-    act1 = sum(r["acts_cleared"] >= 1 for r in synced)
+    engine_errors = [r for r in rows if r["engine_error"]]
+    bench_errors = [r for r in rows if r.get("bench_error")]
+    desyncs = [r for r in rows if not r["in_sync"] and not r["engine_error"] and not r.get("bench_error")]
+    finished = [r for r in rows if r["in_sync"] and r["finished"]]
+    usable = finished + desyncs
+    acts = {}
+    for a in range(1, max_act + 1):
+        # Decided while in sync: the run finished in sync, or it had already cleared act a.
+        known = [r for r in usable if r in finished or r["acts_cleared"] >= a]
+        cleared = sum(r["acts_cleared"] >= a for r in known)
+        acts[a] = {"cleared": cleared, "known": len(known), "rate": cleared / len(known) if known else 0.0,
+                   "ci95": wilson(cleared, len(known))}
+    wins = sum(r["won"] for r in finished)
     return {
         "runs": n,
-        "in_sync": k,
+        "in_sync": len(finished),
         "desyncs": len(desyncs),
-        "engine_errors": len(errors),
+        "engine_errors": len(engine_errors),
+        "bench_errors": len(bench_errors),
         "desync_floors": sorted(r["desync_floor"] for r in desyncs),
         "desync_reasons": dict(Counter(reason_kind(r["desync_reason"]) for r in desyncs).most_common()),
-        "error_samples": [r["engine_error"] for r in errors[:3]],
-        "synced_win_rate": wins / k if k else 0.0,
-        "synced_win_ci95": wilson(wins, k),
-        "synced_act1_clear": act1 / k if k else 0.0,
-        "synced_act1_ci95": wilson(act1, k),
-        "synced_mean_floor": statistics.mean(r["final_floor"] for r in synced) if synced else 0.0,
-        "synced_score": statistics.mean(r["score"] for r in synced) if synced else 0.0,
+        "error_samples": [r["engine_error"] for r in engine_errors[:3]] + [r["bench_error"] for r in bench_errors[:3]],
+        "acts": acts,
+        "wins": wins,
+        "win_rate": wins / len(finished) if finished else 0.0,
+        "win_ci95": wilson(wins, len(finished)),
+        "synced_mean_floor": statistics.mean(r["final_floor"] for r in finished) if finished else 0.0,
+        "forfeits": sum(r.get("forfeits", 0) for r in rows),
+        "restricted": sum(r.get("restricted", 0) for r in rows),
+        "restricted_runs": sum(1 for r in rows if r.get("restricted", 0)),
         "max_act": max_act,
         "seconds_per_run": statistics.mean(r["seconds"] for r in rows) if rows else 0.0,
     }
@@ -95,22 +108,31 @@ def summarize(rows: list[dict], max_act: int) -> dict:
 
 def format_report(s: dict) -> str:
     lines = [
-        f"{s['runs']} runs on the real engine:  {s['in_sync']} in sync to the end, "
-        f"{s['desyncs']} desynced, {s['engine_errors']} engine errors   ({s['seconds_per_run']:.0f}s/run)",
+        f"{s['runs']} runs:  {s['in_sync']} in sync to the end, {s['desyncs']} desynced, "
+        f"{s['engine_errors']} engine errors, {s['bench_errors']} bench errors   ({s['seconds_per_run']:.0f}s/run)",
     ]
     if s["desyncs"]:
         floors = s["desync_floors"]
         lines.append(f"  first desync floor: median {statistics.median(floors):.0f}, range {floors[0]}-{floors[-1]}")
         for kind, count in s["desync_reasons"].items():
             lines.append(f"    {count:3d}  {kind}")
-    if s["error_samples"]:
-        lines.append(f"  engine errors, e.g.: {s['error_samples'][0]}")
-    if s["in_sync"]:
-        lo, hi = s["synced_act1_ci95"]
-        wlo, whi = s["synced_win_ci95"]
+    for sample in s["error_samples"][:2]:
+        lines.append(f"  error, e.g.: {sample}")
+    lines.append("  outcomes, each over the runs still in sync when it was decided:")
+    for a, act in s["acts"].items():
+        lo, hi = act["ci95"]
+        lines.append(f"    Act {a} cleared  {act['cleared']}/{act['known']} = {act['rate']:.0%} [{lo:.0%}, {hi:.0%}]")
+    lo, hi = s["win_ci95"]
+    lines.append(f"    won            {s['wins']}/{s['in_sync']} = {s['win_rate']:.0%} [{lo:.0%}, {hi:.0%}]")
+    if s["forfeits"]:
         lines.append(
-            f"  in-sync runs: Act 1 cleared {s['synced_act1_clear']:.0%} [{lo:.0%}, {hi:.0%}]   "
-            f"won {s['synced_win_rate']:.0%} [{wlo:.0%}, {whi:.0%}]   mean floor {s['synced_mean_floor']:.1f}"
+            f"  {s['forfeits']} extra card rewards / rest options were discarded by sts2-cli (and on the shadow); "
+            f"runs with one can end differently from their simulator twin"
+        )
+    if s["restricted"]:
+        lines.append(
+            f"  {s['restricted']} times (in {s['restricted_runs']} runs) the agent's first choice was a move the "
+            f"game does not have; it took its best real one instead"
         )
     return "\n".join(lines)
 
@@ -156,7 +178,7 @@ def main() -> None:
     tasks = [
         # Agent seeds as in sts2rl.evaluate, so each run is the twin of its simulator run.
         {"seed": seed, "agent_seed": 7_000_000 + i, "cfg": cfg.__dict__, "model": model, "command": command,
-         "cwd": cwd, "loc": loc, "timeout": args.timeout, "out": str(out)}
+         "cwd": cwd, "loc": loc, "timeout": args.timeout, "out": str(out), "ascension": args.ascension}
         for i, seed in enumerate(eval_seeds(args.runs, offset))
     ]
     t = time.perf_counter()
@@ -165,7 +187,12 @@ def main() -> None:
     with ProcessPoolExecutor(args.workers, mp_context=mp.get_context("spawn"), initializer=_init_worker) as ex:
         for row in ex.map(_play, tasks):
             rows.append(row)
-            status = "in sync" if row["in_sync"] else (f"DESYNC floor {row['desync_floor']}: {row['desync_reason']}" if not row["engine_error"] else f"ERROR {row['engine_error']}")
+            if row["in_sync"]:
+                status = "in sync"
+            elif row["engine_error"] or row.get("bench_error"):
+                status = f"ERROR {row['engine_error'] or row['bench_error']}"
+            else:
+                status = f"DESYNC floor {row['desync_floor']}: {row['desync_reason']}"
             print(f"{row['seed']}  floor {row['final_floor']:2d}  {'WON' if row['won'] else '   '}  {status[:160]}", flush=True)
     summary = summarize(rows, args.max_act)
     print()

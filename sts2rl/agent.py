@@ -62,6 +62,20 @@ class RunRecord:
     combats: int = 0
 
 
+def choices(run: sim.Run) -> np.ndarray:
+    """The legal moves a player of the real game has.
+
+    The simulator lets a run walk away from any event without choosing (its event "skip").
+    The game has no such button: in recorded real runs that action only ever stands for
+    the Proceed on an event's result page, where it is the one move there is. So on a
+    page that offers real options, it is left out.
+    """
+    legal = run.legal()
+    if run.phase == sim.PHASE_EVENT and len(legal) > 1:
+        legal = legal[legal != sim.EVENT_SKIP]
+    return legal
+
+
 def heuristic_value(run: sim.Run, max_act: int = 3, maps: F.MapCache | None = None) -> float:
     """Value before any learning -- exactly what an untrained network predicts."""
     if run.done:
@@ -177,7 +191,7 @@ class Agent:
     # ----------------------------------------------------------------------------------
     # everything else
 
-    def _noncombat_move(self, run: sim.Run, legal: np.ndarray) -> int:
+    def _noncombat_move(self, run: sim.Run, legal: np.ndarray, allowed: set[int] | None = None) -> int:
         options = [int(a) for a in legal]
         if len(options) == 1:
             return options[0]
@@ -191,7 +205,7 @@ class Agent:
             if claims:
                 return claims[0]
         if self.cfg.epsilon > 0 and self.rng.random() < self.cfg.epsilon:
-            return self.rng.choice(options)
+            return self.rng.choice([a for a in options if allowed is None or a in allowed] or options)
         if len(options) > MAX_OPTIONS:
             options = self.rng.sample(options, MAX_OPTIONS)
         k = self.cfg.samples if run.phase in STOCHASTIC_PHASES else 1
@@ -210,7 +224,7 @@ class Agent:
                     else:
                         c.close()
             if not clones:
-                return options[-1]
+                return next((a for a in reversed(options) if allowed is None or a in allowed), options[-1])
             vals = self.values(clones)
         finally:
             for c in clones:
@@ -218,7 +232,15 @@ class Agent:
         totals: dict[int, list[float]] = {}
         for a, v in zip(owners, vals):
             totals.setdefault(a, []).append(float(v))
-        best = max(totals, key=lambda a: (sum(totals[a]) / len(totals[a]), -options.index(a)))
+
+        def score(a):
+            return (sum(totals[a]) / len(totals[a]), -options.index(a))
+
+        best = max(totals, key=score)
+        if allowed is not None and best not in allowed:
+            self.stats["restricted"] = self.stats.get("restricted", 0) + 1  # it wanted a move the game lacks
+            kept = [a for a in totals if a in allowed]
+            best = max(kept, key=score) if kept else next(a for a in options if a in allowed)
         return best
 
     def _bundle_move(self, run: sim.Run, options: list[int]) -> int:
@@ -258,21 +280,25 @@ class Agent:
         record.states.append(enc)
         record.v_pred.append(float(self.model.predict(enc)[0]) if self.model is not None else math.nan)
 
-    def act(self, run: sim.Run, record: RunRecord | None = None) -> tuple[int, int]:
+    def act(self, run: sim.Run, record: RunRecord | None = None, allowed=None) -> tuple[int, int]:
+        """The move to make. `allowed` limits a non-combat choice to some of the legal
+        moves (the real-engine bench leaves out moves the game has no button for). Every
+        legal move is still evaluated, so the agent's random stream -- and with it every
+        later decision -- is the same as without the limit whenever it does not bind."""
         if run.phase == sim.PHASE_COMBAT:
             t = time.perf_counter()
             move = self._combat_move(run, record)
             self.stats["combat_time"] += time.perf_counter() - t
             return move
         self._combat_key = None
-        legal = run.legal()
+        legal = choices(run)
         if len(legal) == 0:
             raise RuntimeError(f"no legal action in phase {run.phase} at floor {run.floor}")
         t = time.perf_counter()
         if record is not None and len(legal) > 1:
             self._record(run, record)
             record.decisions += 1
-        a = self._noncombat_move(run, legal)
+        a = self._noncombat_move(run, legal, None if allowed is None else {int(x) for x in allowed})
         self.stats["noncombat_time"] += time.perf_counter() - t
         return a, -1
 
@@ -294,7 +320,7 @@ class Agent:
                     key = run.obs.tobytes()
                     seen[key] = seen.get(key, 0) + 1
                     if seen[key] > LOOP_LIMIT:
-                        others = [int(a) for a in run.legal() if int(a) != action]
+                        others = [int(a) for a in choices(run) if int(a) != action]
                         if others:
                             action, target = self.rng.choice(others), -1
                 else:

@@ -16,7 +16,12 @@
 # --smoke) is kept:
 #   d11aa88  (2026-05-30)  written for Steam build 23372702 (v0.106.1)
 #   084d1aa  (2026-09-07)  written for v0.111.0 (beta)
-# The public v0.107.1 (Steam build 23811903) sits between the two.
+# The public v0.107.1 (Steam build 23811903) sits between the two. Our fixes to sts2-cli
+# itself (patches/sts2-cli/) are applied before each build.
+#
+# The checkout is reset between attempts, so the script only ever works in a directory it
+# created (marked .sts2rl-managed); point STS2CLI_DIR at your own sts2-cli clone and it
+# refuses rather than wipe it.
 #
 # Needs git, python3 and the .NET 9 SDK (setup.sh installs one into ~/.dotnet).
 set -euo pipefail
@@ -67,8 +72,14 @@ fi
 echo "    $GAME_DIR"
 
 echo "==> sts2-cli"
-if [ ! -d "$CLI_DIR/.git" ]; then
+MARKER=".sts2rl-managed"
+if [ ! -e "$CLI_DIR" ]; then
   git clone --quiet "$REPO" "$CLI_DIR"
+  touch "$CLI_DIR/$MARKER"
+elif [ ! -f "$CLI_DIR/$MARKER" ]; then
+  echo "$CLI_DIR exists but was not created by this script; it resets that checkout between" >&2
+  echo "attempts, so it will not touch it. Remove it, or pick another STS2CLI_DIR." >&2
+  exit 1
 else
   git -C "$CLI_DIR" fetch --quiet origin
 fi
@@ -76,7 +87,10 @@ fi
 for rev in "${REVISIONS[@]}"; do
   echo "==> trying sts2-cli ${rev:0:7}"
   git -C "$CLI_DIR" checkout --quiet --force "$rev"
-  git -C "$CLI_DIR" clean -fdxq  # a failed attempt must not leave its build or DLLs behind
+  git -C "$CLI_DIR" clean -fdxq -e "$MARKER"  # a failed attempt must not leave its build or DLLs behind
+  for patch in "$ROOT"/patches/sts2-cli/*.patch; do
+    git -C "$CLI_DIR" apply "$patch"
+  done
   if (cd "$CLI_DIR" && bash ./setup.sh "$GAME_DIR") && "$PY" -m sts2rl.bridge.cli --smoke "$CLI_DIR"; then
     echo "$rev" > "$CLI_DIR/.sts2rl-revision"
     echo

@@ -22,8 +22,8 @@ FAKE = [sys.executable, str(Path(__file__).with_name("fake_sts2cli.py"))]
 CFG = dict(combat_sims=8, samples=1, max_act=1, record=False)
 
 
-def bench(seed: str, agent_seed: int = 7_000_000):
-    agent = Agent(None, AgentConfig(**CFG), seed=agent_seed)
+def bench(seed: str, agent_seed: int = 7_000_000, **cfg):
+    agent = Agent(None, AgentConfig(**{**CFG, **cfg}), seed=agent_seed)
     with cli.CliGame(FAKE, timeout=60) as game:
         return cli.CliSession(game, agent, cli.Names(None), seed).play()
 
@@ -35,6 +35,19 @@ def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed):
     assert result.finished
     twin = Agent(None, AgentConfig(**CFG), seed=7_000_000).play(seed)
     assert (result.final_floor, result.won) == (twin.final_floor, twin.won)
+
+
+def test_a_run_capped_at_act_1_finishes_when_act_1_is_cleared():
+    result = bench("EVAL000013", agent_seed=7_000_013)
+    assert result.in_sync and result.finished, result.desync_reason
+    assert result.won and result.acts_cleared == 1
+
+
+def test_crossing_into_act_2_with_the_engines_between_act_heal():
+    # sts2-cli heals as soon as the boss dies; the shadow, on the act's ancient.
+    result = bench("EVAL000013", agent_seed=7_000_013, max_act=2)
+    assert result.in_sync, result.desync_reason
+    assert result.final_floor > 18
 
 
 def test_the_first_divergence_is_reported_with_its_floor(monkeypatch):
@@ -57,13 +70,18 @@ def test_smoke_test_passes_on_a_faithful_engine():
     assert cli.smoke_test(None, command=FAKE) == []
 
 
-def test_selection_positions_follow_a_shrinking_list():
-    # Five cards shown; the simulator re-indexes after the second is taken.
-    slots = cli.rekey([0, 2, 3, 4], {0: (1, False), 1: (2, False), 2: (3, False), 3: (4, False)})
-    assert slots == [(0, 0), (1, 2), (2, 3), (3, 4)]
-    # Deck indices: a removal shifts the later ones down by one.
-    assert cli.rekey([0, 1], {3: (7, False), 5: (9, True)}) == [(3, 0), (5, 1)]
-    assert cli.rekey([0, 1], {3: (7, False)}) is None
+def test_deck_selections_are_followed_through_every_kind_of_change():
+    deck = [(1, False), (2, False), (1, False), (3, True)]
+    # removal: the cards after the pick move up one
+    assert cli.follow_deck(deck, [(1, False), (1, False), (3, True)], 1) == {0: 0, 2: 1, 3: 2}
+    # transform: removed, its replacement appended at the end
+    assert cli.follow_deck(deck, [(1, False), (1, False), (3, True), (9, False)], 1) == {0: 0, 2: 1, 3: 2}
+    # upgrade / Claws: changed in place
+    assert cli.follow_deck(deck, [(1, False), (2, True), (1, False), (3, True)], 1) == {0: 0, 2: 2, 3: 3}
+    # duplicate: a copy appended, the original left where it was
+    assert cli.follow_deck(deck, deck + [(2, False)], 1) == {0: 0, 2: 2, 3: 3}
+    # anything else is not followed
+    assert cli.follow_deck(deck, [(3, True), (1, False), (1, False)], 1) is None
 
 
 def test_ids_and_titles():
@@ -82,6 +100,11 @@ def test_reason_kinds_and_report():
         cli.CliRunResult(seed="A", finished=True, won=True, acts_cleared=3, final_floor=51, score=1.0).to_dict(),
         cli.CliRunResult(seed="B", in_sync=False, desync_floor=7, desync_reason="hp: game=1 sim=2").to_dict(),
     ]
+    rows.append(cli.CliRunResult(seed="C", in_sync=False, desync_floor=30, acts_cleared=1, desync_reason="gold: game=1 sim=2").to_dict())
+    rows.append(cli.CliRunResult(seed="D", in_sync=False, bench_error="KeyError: 3").to_dict())
     s = cli_eval.summarize(rows, 3)
-    assert (s["in_sync"], s["desyncs"], s["synced_win_rate"]) == (1, 1, 1.0)
-    assert "1 desynced" in cli_eval.format_report(s)
+    assert (s["in_sync"], s["desyncs"], s["bench_errors"], s["win_rate"]) == (1, 2, 1, 1.0)
+    # Act 1 was decided in sync for A (finished) and C (desynced in act 2), not for B.
+    assert (s["acts"][1]["cleared"], s["acts"][1]["known"]) == (2, 2)
+    assert (s["acts"][2]["cleared"], s["acts"][2]["known"]) == (1, 1)
+    assert "2 desynced" in cli_eval.format_report(s)

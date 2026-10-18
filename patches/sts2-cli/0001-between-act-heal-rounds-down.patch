@@ -1,0 +1,15 @@
+diff --git a/src/Sts2Headless/RunSimulator.cs b/src/Sts2Headless/RunSimulator.cs
+index d780b2a..2968439 100644
+--- a/src/Sts2Headless/RunSimulator.cs
++++ b/src/Sts2Headless/RunSimulator.cs
+@@ -1727,7 +1727,9 @@ public class RunSimulator
+         if (RunManager.Instance.HasAscension((AscensionLevel)2))
+             healAmount *= 0.8m;
+ 
+-        var newHp = currentHp + (int)Math.Ceiling(healAmount);
++        // The game rounds DOWN: a capture crosses into act 2 on 264/280 and stands on its
++        // ancient at 276 (16 missing -> 12, not 13). Patched by StS2RL.
++        var newHp = currentHp + (int)healAmount;
+         if (newHp > maxHp) newHp = maxHp;
+         SetField(player.Creature, "_currentHp", newHp);
+         Log($"Between-act heal: {currentHp} → {newHp} (missing={missingHp}, ascension2+={RunManager.Instance.HasAscension((AscensionLevel)2)})");

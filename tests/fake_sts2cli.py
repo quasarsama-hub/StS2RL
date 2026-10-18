@@ -1,10 +1,13 @@
 """A stand-in for sts2-cli, backed by the simulator, for testing the bench offline.
 
 It speaks sts2-cli's protocol (JSON lines; `start_run`, `action`, `quit`) and reproduces
-the engine's habits the bench depends on: gold, relics and potions are collected without
-asking, chests open themselves, "proceed" pages are skipped, enemies are listed alive-only
-and targeted by alive ordinal, potions by slot, the floor is counted per act, relics and
-potions are reported by title, cards by "CARD.<ENTRY>".
+the engine's habits the bench depends on (each from sts2-cli's RunSimulator.cs): gold,
+potions and relics are collected without asking, in reward order; chests open themselves;
+"proceed" pages are skipped; a selection with one forced pick is made without a screen;
+the between-act heal lands as soon as the boss dies; enemies are listed alive-only and
+targeted by alive ordinal, potions by slot; the floor is counted per act; relics and
+potions are reported by title, cards by "CARD.<ENTRY>". Events show only real options --
+the simulator's walk-away action has no button in the game.
 
 FAKE_STS2CLI_FAULT=hp:<floor> makes it report one HP less than the truth from that floor
 on, so a test can check the bench notices.
@@ -48,19 +51,16 @@ class Engine:
             legal = [int(a) for a in run.legal()]
             if ph == sim.PHASE_RELIC_REWARD:
                 gold, potion, relic, cards = run.state_list(6, 4)
-                items = ["gold"] * bool(gold) + ["potion"] * bool(potion) + ["relic"] * bool(relic) + ["card"] * int(cards)
-                for item in ("gold", "relic", "potion", "card"):
-                    if item in items:
-                        run.step(items.index(item))
-                        break
-                else:
-                    run.step(REWARD_SKIP)
+                run.step(0 if (gold or potion or relic or cards) else REWARD_SKIP)  # in reward order
                 continue
             if ph == cli.PHASE_TREASURE:
                 run.step(REWARD_SKIP)
                 continue
             if ph in (sim.PHASE_EVENT, sim.PHASE_ANCIENT, sim.PHASE_REST) and len(legal) == 1:
-                run.step(legal[0])  # a result page or a spent rest site: sts2-cli moves on
+                run.step(legal[0])  # a result page, a spent rest site, an event with no options
+                continue
+            if ((ph == sim.PHASE_COMBAT and run.pending_selection() > 0) or ph == cli.PHASE_TRANSFORM_SELECT) and len(legal) == 1:
+                run.step(legal[0])  # one forced pick: HeadlessCardSelector returns it at once
                 continue
             break
         act = F.ACT_ORDINAL.get(run.act_id, 1)
@@ -71,6 +71,8 @@ class Engine:
     def player(self) -> dict:
         run = self.run
         hp = run.hp
+        if cli.at_act_start(run):
+            hp += int((run.max_hp - run.hp) * cli.BETWEEN_ACT_HEAL)  # healed when the boss died
         if FAULT.startswith("hp:") and run.floor >= int(FAULT[3:]):
             hp -= 1
         pots = run.combat_potions() if run.phase == sim.PHASE_COMBAT else list(run.potions())
@@ -79,9 +81,19 @@ class Engine:
             "max_hp": run.max_hp,
             "gold": run.gold,
             "relics": [{"name": NAMES.relic(int(r[0]))} for r in run.relics()],
-            "potions": [{"index": i, "name": NAMES.potion(p)} for i, p in enumerate(pots) if p],
-            "deck": [{"id": "CARD." + cli.card_entry(int(c[0])), "upgraded": bool(c[1])} for c in run.deck()],
+            # Player.Potions skips empty slots: the index counts potions held, not slots.
+            "potions": [{"index": i, "name": NAMES.potion(p)} for i, p in enumerate(p for p in pots if p)],
+            "deck": [self.deck_card(c) for c in run.deck()],
         }
+
+    @staticmethod
+    def deck_card(c) -> dict:
+        card = {"id": "CARD." + cli.card_entry(int(c[0])), "upgraded": bool(c[1])}
+        if int(c[2]):  # sts2-cli adds the enchantment's title (and a non-zero amount) only when there is one
+            card["enchantment"] = f"ENCHANTMENT_{int(c[2])}"
+            if int(c[3]):
+                card["enchantment_amount"] = int(c[3])
+        return card
 
     def context(self) -> dict:
         act = F.ACT_ORDINAL.get(self.run.act_id, 1)
@@ -136,12 +148,13 @@ class Engine:
             potions = [{"index": i, "name": NAMES.potion(p), "is_stocked": bool(p)} for i, p in enumerate(run.state_list(10, 3))]
             return {**base, "decision": "shop", "cards": cards, "relics": relics, "potions": potions}
         if ph in (sim.PHASE_EVENT, sim.PHASE_ANCIENT):
-            legal = {int(a) for a in run.legal()}
+            legal = {int(a) for a in run.legal()} - ({cli.EVENT_SKIP} if ph == sim.PHASE_EVENT else set())
             n = max(legal) + 1 if legal else 0
             if ph == sim.PHASE_ANCIENT:
                 keys = [f"NEOW.pages.INITIAL.options.{cli.relic_entry(r)}" for r in run.state_list(3, 3) if r]
             else:
-                keys = [f"EVENT.option{i}" for i in range(n)]
+                entry = cli.event_entry_by_id().get(run.event_id, "SOME_EVENT")
+                keys = [f"{entry}.pages.INITIAL.options.OPTION_{i}" for i in range(n)]
             options = [{"index": i, "text_key": keys[i] if i < len(keys) else "", "is_locked": i not in legal} for i in range(n)]
             return {**base, "decision": "event_choice", "options": options}
         if ph == PHASE_BUNDLE_SELECT:
@@ -158,7 +171,11 @@ class Engine:
         run = self.run
         if name in ("play_card", "use_potion"):
             hand = run.hand()
-            action = int(args["card_index"]) if name == "play_card" else len(hand) + 1 + int(args["potion_index"])
+            if name == "play_card":
+                action = int(args["card_index"])
+            else:
+                held = [slot for slot, p in enumerate(run.combat_potions()) if p]
+                action = len(hand) + 1 + held[int(args["potion_index"])]
             living = run.living_enemy_indices()
             target = -1
             if "target_index" in args:
@@ -170,16 +187,21 @@ class Engine:
             self.step(len(run.hand()))
         elif name in ("select_cards", "skip_select"):
             # Indices name positions in the list as it was first shown; the simulator's
-            # list changes as cards are taken, so each position is followed through it.
-            slots = cli.rekey(list(range(len(cli.selection_options(run)))), cli.selection_options(run))
-            taken: list[int] = []
+            # list (or deck) changes as cards are taken, so each position is followed.
+            deck_mode = run.phase == cli.PHASE_TRANSFORM_SELECT and not cli.offer_cards(run)
+            where = {pos: a for pos, a in enumerate(sorted(cli.selection_options(run)))}
             for position in ([int(p) for p in args["indices"].split(",")] if name == "select_cards" else []):
-                action = next(a for a, pos in slots if pos == position)
+                action = where.pop(position)
+                deck_before = [(int(c[0]), bool(c[1])) for c in run.deck()]
+                count = len(cli.selection_options(run))
                 self.step(action)
-                taken.append(position)
                 if not self._selection_open():
                     break
-                slots = cli.rekey([pos for _, pos in slots if pos not in taken], cli.selection_options(run))
+                if deck_mode:
+                    moved = cli.follow_deck(deck_before, [(int(c[0]), bool(c[1])) for c in run.deck()], action)
+                    where = {pos: moved[a] for pos, a in where.items()}
+                elif len(cli.selection_options(run)) == count - 1:
+                    where = {pos: a - (a > action) for pos, a in where.items()}
             if self._selection_open():
                 done = [int(a) for a in run.legal() if int(a) not in cli.selection_options(run)]
                 if done:
