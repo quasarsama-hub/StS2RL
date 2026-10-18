@@ -56,7 +56,7 @@ else
 fi
 TORCH_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA:-cpu}"
 $INSTALL --index-url "$TORCH_INDEX" "torch>=2.4"
-$INSTALL -e "$ROOT"
+$INSTALL -e "$ROOT[dev]"
 
 echo
 echo "Done. Activate with:  source .venv/bin/activate"
