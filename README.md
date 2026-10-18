@@ -69,21 +69,30 @@ regression tests patches 5 and 6 add).
 **Ironclad, Ascension 8**, greedy play, simulator runs of the full three-act game. "Act 1
 cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
-**Held-out evaluation** — 128 seeds (`EVAL001000…`) never used for training or for picking
-the checkpoint. Same seeds for every row, so the comparison is paired:
+**Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
+picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
+with all six simulator patches (`results/dev-run/final-eval-patch0006/`):
 
-| agent | combat sims / move | run score | Act 1 cleared | mean floor reached |
-|---|---|---|---|---|
-| heuristic, no training | 48 | 0.135 | 14% [9–21%] | 13.8 |
-| **trained** (`models/best.pt`) | 48 | 0.180 | **44% [36–52%]** | 18.4 |
-| **trained**, deeper search | 128 | 0.195 | **55% [47–64%]** | 19.9 |
+| agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
+|---|---|---|---|---|---|
+| heuristic, no training | 48 | 0.142 | 27% [20–36%] | 0 | 14.5 |
+| **trained** (`models/best.pt`) | 48 | 0.193 | **52% [43–60%]** | 1 run | 19.7 |
+| **trained**, deeper search | 128 | 0.204 | **66% [58–74%]** | 2 runs | 20.8 |
 
-Training roughly **tripled the Act 1 clear rate** after ~1,800 self-play runs (about 30
-minutes on 4 CPU cores), and more search per move adds another ~11 points. No run has
-cleared Act 2 yet: deaths moved from Act 1 elites (Terror Eel, Phantasmal Gardeners) to
-Act 1 bosses (Vantom, Kin, Lagavulin Matriarch) and early Act 2 fights.
+Paired, at 48 sims: the trained agent clears Act 1 on 66 seeds to the heuristic's 35 (59
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.051 [+0.037,
++0.065]. Training **roughly doubled the Act 1 clear rate** after ~1,800 self-play runs
+(about 30 minutes on 4 CPU cores), and more search per move adds another ~14 points.
+Deaths moved from Act 1 elites and hallway fights (Phantasmal Gardeners, Phrog Parasite)
+to the Act 1 bosses (Vantom, Lagavulin Matriarch, Kin) and early Act 2.
 
-**The learning curve** (64 selection seeds, 48 sims; ±~6 points of noise per row):
+This checkpoint was trained *before* patch 0006 gave treasure chests their relic, so it
+has never seen a chest relic in training. Measured without that patch, the same rows read
+14% / 44% / 55% (`results/dev-run/final-eval/`): the chest relic the simulator used to
+withhold is worth 8–13 points of Act 1 clears on its own.
+
+**The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
+points of noise per row):
 
 | iteration | self-play runs | score | Act 1 cleared | mean floor |
 |---|---|---|---|---|

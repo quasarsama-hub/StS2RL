@@ -71,5 +71,85 @@
     "soul-fysh": 7
    }
   }
+ },
+ "results_patch0006": {
+  "note": "re-measured with simulator patch 0006 (treasure chests give their relic); the checkpoint itself was trained before it",
+  "seeds": "EVAL001000-EVAL001127 (test split)",
+  "heuristic_s48": {
+   "runs": 128,
+   "score": 0.142,
+   "act1_clear": 0.2734375,
+   "act1_clear_ci95": [
+    0.204,
+    0.356
+   ],
+   "act2_clear": 0.0,
+   "win_rate": 0.0,
+   "mean_floor": 14.48,
+   "deaths": {
+    "phantasmal-gardeners": 15,
+    "phrog-parasite": 10,
+    "bygone-effigy": 8,
+    "byrdonis": 8,
+    "lagavulin-matriarch": 8,
+    "vantom": 7,
+    "chompers": 7,
+    "slumbering-beetle": 7
+   }
+  },
+  "best_s48": {
+   "runs": 128,
+   "score": 0.1928,
+   "act1_clear": 0.515625,
+   "act1_clear_ci95": [
+    0.43,
+    0.6
+   ],
+   "act2_clear": 0.0078125,
+   "win_rate": 0.0,
+   "mean_floor": 19.66,
+   "deaths": {
+    "vantom": 12,
+    "lagavulin-matriarch": 11,
+    "kin": 10,
+    "spiny-toad": 9,
+    "slumbering-beetle": 8,
+    "soul-fysh": 7,
+    "chompers": 7,
+    "hunter-killer": 7
+   }
+  },
+  "best_s128": {
+   "runs": 128,
+   "score": 0.2038,
+   "act1_clear": 0.6640625,
+   "act1_clear_ci95": [
+    0.579,
+    0.74
+   ],
+   "act2_clear": 0.015625,
+   "win_rate": 0.0,
+   "mean_floor": 20.79,
+   "deaths": {
+    "hunter-killer": 12,
+    "bowlbugs": 9,
+    "lagavulin-matriarch": 9,
+    "vantom": 9,
+    "ovicopter": 8,
+    "slumbering-beetle": 8,
+    "decimillipede": 7,
+    "spiny-toad": 7
+   }
+  },
+  "paired_s48": {
+   "act1_heuristic": 35,
+   "act1_best": 66,
+   "act1_mcnemar_p": 7e-05,
+   "score_diff": 0.0508,
+   "score_diff_ci95": [
+    0.0373,
+    0.0645
+   ]
+  }
  }
 }
