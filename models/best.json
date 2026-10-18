@@ -1,0 +1,75 @@
+{
+ "checkpoint": "runs/main iteration 8",
+ "character": "Ironclad",
+ "ascension": 8,
+ "selection_seeds": "EVAL000000-EVAL000063",
+ "heldout_seeds": "EVAL001000-EVAL001127",
+ "results": {
+  "heuristic_s48": {
+   "runs": 128,
+   "score": 0.1351,
+   "act1_clear": 0.140625,
+   "act1_clear_ci95": [
+    0.091,
+    0.211
+   ],
+   "act2_clear": 0.0,
+   "win_rate": 0.0,
+   "mean_floor": 13.78,
+   "deaths": {
+    "terror-eel": 13,
+    "phantasmal-gardeners": 12,
+    "phrog-parasite": 11,
+    "bygone-effigy": 9,
+    "soul-fysh": 8,
+    "kin": 8,
+    "byrdonis": 7,
+    "vantom": 6
+   }
+  },
+  "best_s48": {
+   "runs": 128,
+   "score": 0.1799,
+   "act1_clear": 0.4375,
+   "act1_clear_ci95": [
+    0.355,
+    0.524
+   ],
+   "act2_clear": 0.0,
+   "win_rate": 0.0,
+   "mean_floor": 18.35,
+   "deaths": {
+    "vantom": 16,
+    "lagavulin-matriarch": 11,
+    "kin": 10,
+    "ovicopter": 9,
+    "bowlbugs": 8,
+    "spiny-toad": 8,
+    "ceremonial-beast": 7,
+    "slumbering-beetle": 7
+   }
+  },
+  "best_s128": {
+   "runs": 128,
+   "score": 0.1947,
+   "act1_clear": 0.5546875,
+   "act1_clear_ci95": [
+    0.468,
+    0.638
+   ],
+   "act2_clear": 0.0,
+   "win_rate": 0.0,
+   "mean_floor": 19.86,
+   "deaths": {
+    "spiny-toad": 15,
+    "vantom": 12,
+    "kin": 11,
+    "ovicopter": 10,
+    "lagavulin-matriarch": 9,
+    "hunter-killer": 9,
+    "slumbering-beetle": 8,
+    "soul-fysh": 7
+   }
+  }
+ }
+}

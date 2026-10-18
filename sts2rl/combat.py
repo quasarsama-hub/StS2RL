@@ -211,7 +211,6 @@ class CombatSearch:
         return 0.5
 
     def _select(self, node: Node, moves) -> tuple:
-        log_n = math.log(max(1, node.visits))
         best, best_score = None, -math.inf
         c = self.cfg.c_explore
         for move in moves:

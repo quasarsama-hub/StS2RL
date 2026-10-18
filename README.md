@@ -49,7 +49,7 @@ and play worse than the heuristic it was supposed to improve on.)
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
 captures, exact RNG, exact map generation). It's pinned as a git submodule; this repo
-carries four patches for it (`patches/sts2/`):
+carries five patches for it (`patches/sts2/`):
 
 | patch | what it does |
 |---|---|
@@ -59,14 +59,44 @@ carries four patches for it (`patches/sts2/`):
 | `0004-end-turn-flush-snapshot` | Fixes a crash ("Collection was modified") when an end-of-turn exhaust draws a card mid-flush (e.g. Dark Embrace + Ethereal); the drawn card is flushed instead of vanishing. |
 | `0005-golden-path-unknown-rooms` | Golden Compass's single-column map typed its "?" rooms as *no node*, which the map screen can't move onto, so every Golden Compass run got stuck on its second floor. |
 
-The simulator's own test suite (4,801 tests) passes with all five patches applied.
+The simulator's own test suite passes with all five patches applied (4,802 tests, including a
+regression test patch 5 adds).
 
 ## Results so far
 
-All numbers are from fixed evaluation seeds (`EVAL000000…`), **Ironclad, Ascension 8**,
-greedy play. "Act 1 clear" = beat the Act 1 boss. 95% Wilson intervals in brackets.
+**Ironclad, Ascension 8**, greedy play, simulator runs of the full three-act game. "Act 1
+cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
-RESULTS_TABLE
+**Held-out evaluation** — 128 seeds (`EVAL001000…`) never used for training or for picking
+the checkpoint. Same seeds for every row, so the comparison is paired:
+
+| agent | combat sims / move | run score | Act 1 cleared | mean floor reached |
+|---|---|---|---|---|
+| heuristic, no training | 48 | 0.135 | 14% [9–21%] | 13.8 |
+| **trained** (`models/best.pt`) | 48 | 0.180 | **44% [36–52%]** | 18.4 |
+| **trained**, deeper search | 128 | 0.195 | **55% [47–64%]** | 19.9 |
+
+Training roughly **tripled the Act 1 clear rate** after ~1,800 self-play runs (about 30
+minutes on 4 CPU cores), and more search per move adds another ~11 points. No run has
+cleared Act 2 yet: deaths moved from Act 1 elites (Terror Eel, Phantasmal Gardeners) to
+Act 1 bosses (Vantom, Kin, Lagavulin Matriarch) and early Act 2 fights.
+
+**The learning curve** (64 selection seeds, 48 sims; ±~6 points of noise per row):
+
+| iteration | self-play runs | score | Act 1 cleared | mean floor |
+|---|---|---|---|---|
+| heuristic | — | 0.129 | 12% | 13.2 |
+| 0 | 200 | 0.143 | 9% | 14.6 |
+| 1 | 400 | 0.178 | 33% | 18.2 |
+| 3 | 798 | 0.184 | 41% | 18.7 |
+| 8 | 1,796 | 0.193 | 45% | 19.7 |
+| 10 | 2,196 | 0.192 | 48% | 19.6 |
+| 14 | 2,996 | 0.170 | 31% | 17.4 |
+
+Most of the gain came in the first ~800 runs, then it plateaued around 40–45% at this
+scale (iterations 6–14 are within noise of each other). Getting past the Act 1 bosses is
+now a combat-strength problem more than a deck-building one; see *Pushing it further*.
+`python -m sts2rl.report runs/<name>` prints this table for your own runs.
 
 For scale: the strongest public StS2 bot ([STS2FableBot](https://github.com/cicero225/STS2FableBot),
 hand-tuned search + heuristics, ~4,000 live runs of development) reports ~20% full-run wins
@@ -86,7 +116,11 @@ source .venv/bin/activate
 
 python -m sts2rl.evaluate --agent heuristic --runs 16     # smoke test
 python -m pytest tests -q                                  # 40 tests, ~30 s
+python -m sts2rl.watch --model models/best.pt --seed ANYSEED   # the trained agent
 ```
+
+`models/best.pt` is the checkpoint from the results below; you can continue training from
+it (see `models/README.md`) instead of starting over.
 
 ### Train
 
@@ -101,10 +135,13 @@ resumes.
 
 It's CPU-bound (search), not GPU-bound: throughput scales with cores. Rough numbers:
 
-| machine | self-play runs/hour (24 sims) |
+| machine | self-play runs per hour (24 sims, at the current skill level) |
 |---|---|
-| 4 cores (this repo's development box) | ~800 early, fewer as runs get longer |
-| 16 cores | ~3,000+ |
+| 4 cores (this repo's development box) | ~4,000 including training and evaluation time |
+| 16 cores | ~15,000 |
+
+Runs get longer as the agent gets better (a full three-act run is ~3× an Act 1 death),
+so expect these to fall over time.
 
 Knobs that matter most:
 
@@ -155,20 +192,20 @@ Check with `curl -s http://localhost:15526/` from the WSL shell while the game i
 
 ```bash
 # bridge starts a seeded custom run
-python -m sts2rl.bridge.live --model runs/main/best.pt --seed MYSEED001 --abandon-existing
+python -m sts2rl.bridge.live --model models/best.pt --seed MYSEED001 --abandon-existing
 # or: start an Ironclad A8 run yourself, stop on the first Neow screen, then
-python -m sts2rl.bridge.live --model runs/main/best.pt --attach
+python -m sts2rl.bridge.live --model models/best.pt --attach
 ```
 
 Every step is logged to `runs/live/<seed>.jsonl`. `--sims 200` (default) is stronger than
 training play; raise it if you don't mind slower turns.
 
-**How it's been tested:** I can't run the game in this environment, so the bridge was
+**How it's been tested:** the bridge has not yet been run against the live game. It was
 checked against 30 full runs recorded from the real game (shipped with the simulator).
 Replaying each through the shadow simulator, **all 30 stayed in sync for every step
 (~3,000 decisions)**, and the bridge's sim-action → game-command mapping reproduced the
 command the real game received **every time**. The live HTTP loop itself reuses the
-simulator project's capture driver, which has played many live runs. What has *not* been
+simulator project's capture driver, which recorded those runs. What has *not* been
 exercised yet is shop purchases and multi-card selection screens against the live game.
 
 ## Limitations, honestly
@@ -186,6 +223,23 @@ exercised yet is shop purchases and multi-card selection screens against the liv
   leaf evaluator (the simulator project measured +2 HP/fight from just the policy prior).
 * "Extraordinarily good and consistent" is a compute question from here: the loop
   improves with more self-play, and it parallelises across as many cores as you give it.
+
+## Pushing it further
+
+In rough order of expected payoff:
+
+1. **More self-play, in bigger batches.** The curve above came from a 4-core box in under
+   an hour and plateaued because each iteration's 200 runs carry little signal about
+   individual cards. Give it 16–64 cores; raise `--runs-per-iter` to 500–1000 and
+   `--eval-runs` to 200 so improvements are measured, not guessed.
+2. **A learned combat network** (AlphaZero-style policy prior + leaf value, trained on the
+   search's own visit counts). Deaths now concentrate on act bosses, which are long
+   fights where a hand-written rollout policy is the weakest link.
+3. **Deeper search where it matters.** Bosses already get 4× the simulations; live play
+   defaults to 200 per move. Evaluation is cheap to run at 400+.
+4. **Simulator coverage.** Every Act 2–3 divergence fixed upstream (or by a patch here)
+   makes the agent's later-act play transfer better to the real game. The bridge's
+   desync log (`runs/live/*.jsonl`) is exactly the evidence needed to find them.
 
 ## Layout
 

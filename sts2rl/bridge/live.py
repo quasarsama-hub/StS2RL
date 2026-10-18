@@ -31,7 +31,6 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from .. import paths, sim
 from .. import gamedata as gd
