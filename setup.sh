@@ -31,7 +31,7 @@ else
   # whole stack in order (patches build on each other). Build output is left alone.
   if [ -n "$(git -C "$SIM" status --porcelain)" ]; then
     echo "    re-applying the patch stack from a clean simulator tree"
-    git -C "$SIM" checkout -- .
+    git -C "$SIM" reset --quiet --hard  # also drops files staged in the submodule's index
     git -C "$SIM" clean -fdq
   fi
   for patch in "$ROOT"/patches/sts2/*.patch; do
