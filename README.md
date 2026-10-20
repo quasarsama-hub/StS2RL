@@ -72,29 +72,31 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with all six simulator patches, and with the agent unable to walk away from an event (a
+with all seven simulator patches, and with the agent unable to walk away from an event (a
 move the simulator allows and the game does not; see the sts2-cli section)
 (`results/dev-run/final-eval-patch0006/`):
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
-| heuristic, no training | 48 | 0.140 | 26% [19–34%] | 0 | 14.3 |
-| **trained** (`models/best.pt`) | 48 | 0.191 | **59% [51–68%]** | 1 run | 19.4 |
-| **trained**, deeper search | 128 | 0.202 | 55% [47–64%] | 2 runs | 20.6 |
+| heuristic, no training | 48 | 0.146 | 30% [23–39%] | 0 | 14.9 |
+| **trained** (`models/best.pt`) | 48 | 0.191 | **55% [47–64%]** | 2 runs | 19.4 |
+| **trained**, deeper search | 128 | 0.205 | **59% [50–67%]** | 3 runs | 21.0 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 76 seeds to the heuristic's 33 (73
-seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.050 [+0.037,
-+0.063]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
+Paired, at 48 sims: the trained agent clears Act 1 on 71 seeds to the heuristic's 39 (66
+seeds differ, exact McNemar p = 0.0001), and its run score is higher by +0.045 [+0.031,
++0.059]. Training **nearly doubled the Act 1 clear rate** after ~1,800 self-play runs
 (about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
-+0.011 [+0.001, +0.022], p = 0.02) but does not clear Act 1 measurably more often (71 vs
-76 seeds, 37 differ, p = 0.51). Deaths moved from Act 1 hallway fights (Phantasmal
-Gardeners, Phrog Parasite) to the Act 1 bosses (Vantom, Lagavulin Matriarch, Kin) and
-the early Act 2.
++0.015 [+0.004, +0.025], p = 0.004; 1.5 floors) but does not clear Act 1 measurably more
+often (75 vs 71 seeds, 32 differ, p = 0.60). Deaths moved from Act 1 hallway fights
+(Byrdonis, Phrog Parasite, Phantasmal Gardeners) to Slumbering Beetle, the Act 1 bosses
+(Vantom, Lagavulin Matriarch) and the early Act 2.
 
-The checkpoint was trained *before* both of those changes. The trained rows read 44% /
-55% with neither (`results/dev-run/final-eval/`) and 52% / 66% with the chest relics but
-the walk-away still allowed (commit 8f987fd); the heuristic went 14% → 27% → 26%. On 128
-seeds a single rate is good to about ±8 points (95%), so read the three columns of
+The checkpoint was trained *before* patches 0006–0007 and the event fix. The trained rows
+read 44% / 55% with none of them (`results/dev-run/final-eval/`), 52% / 66% with the chest
+relics but the walk-away still allowed (commit 8f987fd), and 59% / 55% once the walk-away
+was gone; the Silver Crucible, fourth-card and event-option fixes then moved them to 55% /
+59%, the two search depths trading places on the same seeds. The heuristic went 14% → 27%
+→ 26% → 30%. On 128 seeds a single rate is good to about ±8 points (95%), so read the
 history as "chest relics help a lot, the rest is noise" rather than to the point.
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6

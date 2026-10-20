@@ -73,55 +73,33 @@
   }
  },
  "results_patch0006": {
-  "note": "simulator with patch 0006 (chests give their relic); agent never walks away from an event (the game has no such button). The checkpoint was trained before both.",
+  "note": "simulator with patches 0001-0007 (chests give their relic, Silver Crucible empties only the first chest, the Lasting Candy fourth card is observed); the agent never walks away from an event (the game has no such button). The checkpoint was trained before all of these.",
   "seeds": "EVAL001000-EVAL001127 (test split)",
   "heuristic_s48": {
    "runs": 128,
-   "score": 0.1405,
-   "act1_clear": 0.2578125,
+   "score": 0.1456,
+   "act1_clear": 0.3046875,
    "act1_clear_ci95": [
-    0.19,
-    0.34
+    0.232,
+    0.389
    ],
    "act2_clear": 0.0,
    "win_rate": 0.0,
-   "mean_floor": 14.33,
+   "mean_floor": 14.85,
    "deaths": {
-    "phantasmal-gardeners": 13,
-    "phrog-parasite": 11,
-    "byrdonis": 9,
+    "byrdonis": 10,
+    "phrog-parasite": 10,
+    "phantasmal-gardeners": 10,
+    "slumbering-beetle": 8,
+    "vantom": 7,
     "spiny-toad": 7,
-    "vantom": 6,
-    "skulking-colony": 6,
-    "soul-fysh": 6,
-    "slumbering-beetle": 5
+    "bygone-effigy": 6,
+    "skulking-colony": 6
    }
   },
   "best_s48": {
    "runs": 128,
    "score": 0.1906,
-   "act1_clear": 0.59375,
-   "act1_clear_ci95": [
-    0.507,
-    0.675
-   ],
-   "act2_clear": 0.0078125,
-   "win_rate": 0.0,
-   "mean_floor": 19.44,
-   "deaths": {
-    "slumbering-beetle": 13,
-    "soul-fysh": 9,
-    "vantom": 9,
-    "lagavulin-matriarch": 7,
-    "obscura": 7,
-    "kin": 7,
-    "hunter-killer": 7,
-    "spiny-toad": 7
-   }
-  },
-  "best_s128": {
-   "runs": 128,
-   "score": 0.2017,
    "act1_clear": 0.5546875,
    "act1_clear_ci95": [
     0.468,
@@ -129,38 +107,60 @@
    ],
    "act2_clear": 0.015625,
    "win_rate": 0.0,
-   "mean_floor": 20.57,
+   "mean_floor": 19.45,
+   "deaths": {
+    "slumbering-beetle": 11,
+    "vantom": 8,
+    "lagavulin-matriarch": 8,
+    "bowlbugs": 7,
+    "spiny-toad": 7,
+    "soul-fysh": 6,
+    "entomancer": 6,
+    "obscura": 6
+   }
+  },
+  "best_s128": {
+   "runs": 128,
+   "score": 0.2055,
+   "act1_clear": 0.5859375,
+   "act1_clear_ci95": [
+    0.499,
+    0.668
+   ],
+   "act2_clear": 0.0234375,
+   "win_rate": 0.0,
+   "mean_floor": 20.96,
    "deaths": {
     "spiny-toad": 15,
-    "vantom": 13,
-    "lagavulin-matriarch": 13,
+    "vantom": 12,
+    "lagavulin-matriarch": 11,
     "slumbering-beetle": 10,
     "kin": 8,
-    "bowlbugs": 6,
-    "entomancer": 6,
-    "ceremonial-beast": 6
+    "bowlbugs": 7,
+    "entomancer": 7,
+    "louse-progenitor": 5
    }
   },
   "paired_heuristic_vs_best_s48": {
-   "act1_heuristic": 33,
-   "act1_best": 76,
-   "act1_mcnemar_p": 4.0931991166650604e-07,
-   "score_diff": 0.0501,
+   "act1_heuristic": 39,
+   "act1_best": 71,
+   "act1_mcnemar_p": 0.0001014771231679886,
+   "score_diff": 0.045,
    "score_diff_ci95": [
-    0.0371,
-    0.0631
+    0.0313,
+    0.0592
    ]
   },
   "paired_best_s48_vs_s128": {
-   "act1_s48": 76,
-   "act1_s128": 71,
-   "act1_mcnemar_p": 0.511,
-   "score_diff": 0.0111,
+   "act1_s48": 71,
+   "act1_s128": 75,
+   "act1_mcnemar_p": 0.597,
+   "score_diff": 0.0149,
    "score_diff_ci95": [
-    0.0008,
-    0.0218
+    0.0044,
+    0.0254
    ],
-   "score_p_s128_better": 0.022
+   "score_p_s128_better": 0.004
   }
  }
 }
