@@ -24,8 +24,10 @@ def rows(run_dir: Path) -> list[dict]:
 
 def gate_cell(row: dict) -> str:
     """Whether this iteration became champion (training runs from before the gate: blank)."""
-    if row["iter"] < 0:
+    if row.get("start_champion"):
         return "start"
+    if row["iter"] < 0:
+        return ""
     gate = row.get("gate")
     if gate is None:
         return ""
@@ -55,7 +57,8 @@ def main() -> None:
         ev = row["eval"]
         it = row["iter"]
         runs = "—" if it < 0 else str(sum(n for i, n in shard_runs.items() if i <= it))
-        name = "heuristic (no training)" if it < 0 else str(it)
+        agent = row.get("agent", "heuristic")
+        name = ("heuristic (no training)" if agent == "heuristic" else agent) if it < 0 else str(it)
         lo, hi = ev["win_ci95"]
         lines.append([
             name, runs, f"{ev['score']:.3f}", f"{ev.get('act1_clear', 0):.0%}", f"{ev.get('act2_clear', 0):.0%}",
@@ -72,16 +75,19 @@ def main() -> None:
         print("  ".join(h.ljust(w) for h, w in zip(header, widths)))
         for line in lines:
             print("  ".join(c.ljust(w) for c, w in zip(line, widths)))
+    champion_path = args.run_dir / "champion.json"
     if data:
         promoted = [r for r in data if (r.get("gate") or {}).get("promoted")]
         gated = any("gate" in r for r in data)
-        if gated and not promoted:
-            print(f"\nchampion: still the starting champion -- no iteration passed the paired test; "
+        if champion_path.exists():
+            champ = json.loads(champion_path.read_text())
+            who = "the untrained heuristic" if champ["model"] == "heuristic" else f"{champ['model']} from iteration {champ['iteration']}"
+            how = "promoted by paired test" if any(r["iter"] == champ["iteration"] for r in promoted) else "the starting champion"
+            print(f"\nchampion: {who} (validation score {champ['summary']['score']:.3f}, {how}); "
                   f"{states} training states recorded")
-        elif promoted:
-            champ = promoted[-1]
-            print(f"\nchampion: iteration {champ['iter']} (validation score {champ['eval']['score']:.3f}, "
-                  f"promoted by paired test); {states} training states recorded")
+        elif gated:
+            print(f"\nchampion: no champion.json; {len(promoted)} iterations passed the paired test; "
+                  f"{states} training states recorded")
         else:
             best = max(data, key=lambda r: r["eval"]["score"])
             print(f"\nhighest validation score: iteration {best['iter']} ({best['eval']['score']:.3f}; "

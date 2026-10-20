@@ -40,6 +40,7 @@ class Engine:
     def __init__(self, seed: str):
         self.run = sim.Run.new(seed)
         self.act_start = {1: self.run.floor}
+        self.rested = False
         self.advance()
 
     # -- the engine's own housekeeping --------------------------------------------------
@@ -57,8 +58,16 @@ class Engine:
                 run.step(REWARD_SKIP)
                 continue
             if ph in (sim.PHASE_EVENT, sim.PHASE_ANCIENT, sim.PHASE_REST) and len(legal) == 1:
-                run.step(legal[0])  # a result page, a spent rest site, an event with no options
+                run.step(legal[0])  # a proceed page, or an event with no options
                 continue
+            if ph == sim.PHASE_EVENT and run.event_id == cli.EVENT_RESULT_PENDING:
+                run.step(0)  # a finished event goes straight to the map
+                continue
+            if ph == sim.PHASE_REST and self.rested:
+                run.step(REWARD_SKIP)  # sts2-cli forces the map after any rest option
+                continue
+            if ph != sim.PHASE_REST and ph != cli.PHASE_TRANSFORM_SELECT:
+                self.rested = False
             if ((ph == sim.PHASE_COMBAT and run.pending_selection() > 0) or ph == cli.PHASE_TRANSFORM_SELECT) and len(legal) == 1:
                 run.step(legal[0])  # one forced pick: HeadlessCardSelector returns it at once
                 continue
@@ -216,6 +225,7 @@ class Engine:
         elif name == "choose_option":
             index = int(args["option_index"])
             if run.phase == sim.PHASE_REST:
+                self.rested = True
                 self.step([int(a) for a in run.legal() if int(a) in cli.REST_IDS][index])
             else:
                 self.step(index)

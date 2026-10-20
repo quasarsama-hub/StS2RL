@@ -65,12 +65,21 @@ def test_gate_blocks_significant_act1_regression_even_with_higher_score():
     assert not ok and "Act 1" in why
 
 
-def test_gate_refuses_incomplete_pairs():
+def test_gate_handles_engine_errors():
+    # The champion errored on a seed: its cached results are fixed, so that seed is left
+    # out rather than blocking every later candidate.
     champion = rows(np.full(40, 0.1))
+    del champion["S3"]
+    ok, why = promotion_decision(compare_paired(champion, rows(np.full(40, 0.3))))
+    assert ok, why
+    # A candidate erroring on one seed in 40 is tolerated; on several it is refused.
     cand = rows(np.full(40, 0.3))
     del cand["S3"]
-    ok, why = promotion_decision(compare_paired(champion, cand))
-    assert not ok and "missing" in why
+    assert promotion_decision(compare_paired(rows(np.full(40, 0.1)), cand))[0]
+    for s in ("S4", "S5"):
+        del cand[s]
+    ok, why = promotion_decision(compare_paired(rows(np.full(40, 0.1)), cand))
+    assert not ok and "engine errors" in why
     ok, why = promotion_decision(compare_paired(rows(np.full(8, 0.1)), rows(np.full(8, 0.3))))
     assert not ok and "pairs" in why
 

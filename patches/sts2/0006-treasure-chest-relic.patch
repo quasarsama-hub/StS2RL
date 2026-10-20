@@ -22,10 +22,10 @@ index 10a9491..7cd84e2 100644
          "run": {
 diff --git a/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs b/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs
 new file mode 100644
-index 0000000..d7fdc3a
+index 0000000..6384936
 --- /dev/null
 +++ b/src/Sts2Emulator.Tests/TreasureChestRelicTests.cs
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,79 @@
 +using Sts2Emulator.Core;
 +using Sts2Emulator.Core.Run;
 +using Xunit;
@@ -80,8 +80,9 @@ index 0000000..d7fdc3a
 +    }
 +
 +    [Fact]
-+    public void SilverCrucibleStillEmptiesTheChest()
++    public void SilverCrucibleEmptiesOnlyTheFirstChest()
 +    {
++        // "The first Treasure Chest you open is empty."
 +        var engine = Run();
 +        var state = engine.State;
 +        state.Relics.Add(new RelicInstance(RunConstants.RelicSilverCrucible, 0));
@@ -93,13 +94,37 @@ index 0000000..d7fdc3a
 +        Assert.Equal(0, state.RelicReward);
 +        Assert.Equal(gold, state.Gold);
 +        Assert.Equal(0, state.Rng.TreasureRoomRelics.CallCount);
++
++        var copy = engine.Clone();
++        foreach (var run in new[] { engine, copy })
++        {
++            RunRewardGenerator.EnterTreasureRoom(run.State);
++            Assert.Equal(RunPhase.RelicReward, run.State.Phase);
++            Assert.NotEqual(0, run.State.RelicReward);
++            Assert.True(run.State.Gold > gold);
++        }
 +    }
 +}
 diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
-index 34db889..2f8feca 100644
+index 34db889..b539376 100644
 --- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
 +++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
-@@ -1005,7 +1005,28 @@ public static class RunRewardGenerator
+@@ -997,15 +997,42 @@ public static class RunRewardGenerator
+     public static void EnterTreasureRoom(RunState state)
+     {
+         ClearRewardScreen(state);
+-        if (state.Relics.Any(relic => relic.DefId == RunConstants.RelicSilverCrucible))
++        // Silver Crucible: "The first Treasure Chest you open is empty." The FIRST -- this
++        // used to empty every chest for the rest of the run.
++        if (
++            !state.SilverCrucibleChestEmptied
++            && state.Relics.Any(relic => relic.DefId == RunConstants.RelicSilverCrucible)
++        )
+         {
++            state.SilverCrucibleChestEmptied = true;
+             state.Phase = RunPhase.Treasure;
+             return;
+         }
  
          int gold = state.PlayerRng.Rewards.NextInt(42, 53);
          RunNonCombatEffects.GainGold(state, (int)(gold * 0.75));
@@ -129,6 +154,32 @@ index 34db889..2f8feca 100644
      }
  
      public static void EnterShop(RunState state)
+diff --git a/src/Sts2Emulator/Core/Run/RunState.cs b/src/Sts2Emulator/Core/Run/RunState.cs
+index 2c025d8..82601dc 100644
+--- a/src/Sts2Emulator/Core/Run/RunState.cs
++++ b/src/Sts2Emulator/Core/Run/RunState.cs
+@@ -155,6 +155,9 @@ public sealed class RunState
+     /// </summary>
+     public List<int> UsedUpRelics = [];
+ 
++    /// <summary>Silver Crucible has emptied its one chest (it empties only the first).</summary>
++    public bool SilverCrucibleChestEmptied;
++
+     /// <summary>
+     /// Potion rewards still owed. The reward screen carries one potion at a time, so
+     /// anything that offers several -- Tiny Mailbox's two, the Potion Courier's three
+diff --git a/src/Sts2Emulator/Core/StateCloning.cs b/src/Sts2Emulator/Core/StateCloning.cs
+index c5c348d..53724f3 100644
+--- a/src/Sts2Emulator/Core/StateCloning.cs
++++ b/src/Sts2Emulator/Core/StateCloning.cs
+@@ -448,6 +448,7 @@ public static class StateCloning
+             SharedRelicBag = state.SharedRelicBag.Clone(),
+             PendingRestUpgrade = state.PendingRestUpgrade,
+             RestResultPending = state.RestResultPending,
++            SilverCrucibleChestEmptied = state.SilverCrucibleChestEmptied,
+             UnknownMapPointsVisited = state.UnknownMapPointsVisited,
+             UnknownMapPointMonsterOdds = state.UnknownMapPointMonsterOdds,
+             UnknownMapPointEliteOdds = state.UnknownMapPointEliteOdds,
 diff --git a/src/sts2_gym/commands.py b/src/sts2_gym/commands.py
 index 7074c27..f77333d 100644
 --- a/src/sts2_gym/commands.py

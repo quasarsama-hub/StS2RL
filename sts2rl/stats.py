@@ -75,8 +75,10 @@ def compare_paired(a: dict, b: dict) -> dict:
     """
     seeds = sorted(set(a) & set(b))
     missing = sorted(set(a) ^ set(b))
+    missing_a = sorted(set(b) - set(a))  # the baseline errored there
+    missing_b = sorted(set(a) - set(b))  # the candidate errored there
     if not seeds:
-        return {"pairs": 0, "missing": missing}
+        return {"pairs": 0, "missing": missing, "missing_a": missing_a, "missing_b": missing_b}
     sa = np.array([a[s]["score"] for s in seeds])
     sb = np.array([b[s]["score"] for s in seeds])
     fa = np.array([a[s]["floor"] for s in seeds], dtype=float)
@@ -89,6 +91,8 @@ def compare_paired(a: dict, b: dict) -> dict:
     return {
         "pairs": len(seeds),
         "missing": missing,
+        "missing_a": missing_a,
+        "missing_b": missing_b,
         "score_a": float(sa.mean()),
         "score_b": float(sb.mean()),
         "score_diff": float(d_score.mean()),
@@ -112,11 +116,16 @@ def promotion_decision(cmp: dict, alpha: float = 0.05, min_pairs: int = 32) -> t
     permutation test at `alpha`. Guard: no statistically significant drop in Act 1 clears
     or in wins (two-sided exact McNemar at `alpha`). A candidate that is merely not worse
     is not promoted -- that is how noise used to become "the best checkpoint".
+
+    A seed the engine errored on is compared on neither side. The champion's errors are
+    fixed (its results are cached and evaluation is deterministic) and must not block every
+    later candidate; a candidate that errors on more than 2% of the seeds is refused.
     """
     if cmp.get("pairs", 0) < min_pairs:
         return False, f"only {cmp.get('pairs', 0)} complete pairs (need {min_pairs})"
-    if cmp.get("missing"):
-        return False, f"{len(cmp['missing'])} seeds missing from one side (engine errors)"
+    candidate_errors = len(cmp.get("missing_b", cmp.get("missing", [])))
+    if candidate_errors > max(1, cmp["pairs"] // 50):
+        return False, f"the candidate hit engine errors on {candidate_errors} seeds"
     for key, name in (("act1_mcnemar", "Act 1 clears"), ("wins_mcnemar", "wins")):
         m = cmp[key]
         a, b = (cmp["act1_a"], cmp["act1_b"]) if key == "act1_mcnemar" else (cmp["wins_a"], cmp["wins_b"])

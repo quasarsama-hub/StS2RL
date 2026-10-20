@@ -20,14 +20,25 @@ echo "==> submodule"
 GIT_LFS_SKIP_SMUDGE=1 git submodule update --init --depth 1 third_party/sts2
 
 echo "==> patches"
+applied=1
 for patch in "$ROOT"/patches/sts2/*.patch; do
-  if git -C "$SIM" apply --reverse --check "$patch" >/dev/null 2>&1; then
-    echo "    already applied: $(basename "$patch")"
-  else
+  git -C "$SIM" apply --reverse --check "$patch" >/dev/null 2>&1 || applied=0
+done
+if [ "$applied" = 1 ]; then
+  echo "    all applied"
+else
+  # A new or changed patch: start again from the pinned simulator source, then apply the
+  # whole stack in order (patches build on each other). Build output is left alone.
+  if [ -n "$(git -C "$SIM" status --porcelain)" ]; then
+    echo "    re-applying the patch stack from a clean simulator tree"
+    git -C "$SIM" checkout -- .
+    git -C "$SIM" clean -fdq
+  fi
+  for patch in "$ROOT"/patches/sts2/*.patch; do
     git -C "$SIM" apply "$patch"
     echo "    applied: $(basename "$patch")"
-  fi
-done
+  done
+fi
 
 echo "==> .NET 9 SDK"
 if ! command -v dotnet >/dev/null 2>&1 || ! dotnet --list-sdks 2>/dev/null | grep -q '^9\.'; then

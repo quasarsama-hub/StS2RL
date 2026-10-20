@@ -36,13 +36,14 @@ from pathlib import Path
 from .. import features as F
 from .. import gamedata as gd
 from .. import sim
-from ..agent import BUNDLE_CONFIRM, PHASE_BUNDLE_SELECT, REWARD_SKIP, Agent
+from ..agent import BUNDLE_CONFIRM, PHASE_BUNDLE_SELECT, REWARD_SKIP, Agent, choices
 
 PHASE_TRANSFORM_SELECT = 9
 PHASE_TREASURE = 10
 SHOP_REMOVE = 13
 SHOP_LEAVE = 14
 EVENT_SKIP = 3  # the simulator's "walk away from the event"; the game has no such button
+EVENT_RESULT_PENDING = -1  # the simulator's event id for an event's result (Proceed) page
 REWARD_FOURTH_CARD = 5  # Lasting Candy's extra card; 4 (Pael's Wing) and 6 (reroll) have no command
 # A8 carries Weary Traveler: the heal entering an act is 80% of the missing HP, rounded
 # down (a capture: 264/280 -> 276). sts2-cli applies it as soon as the boss dies.
@@ -87,6 +88,11 @@ def _snake_upper(name: str) -> str:
 @cache
 def _card_by_entry() -> dict[str, int]:
     return {(c.entry or _snake_upper(c.name)): cid for cid, c in gd.cards().items()}
+
+
+@cache
+def miniature_tent() -> int:
+    return next((rid for rid, r in gd.relics().items() if (r.entry or _snake_upper(r.name)) == "MINIATURE_TENT"), -1)
 
 
 def card_id(game_id: str) -> int:
@@ -160,7 +166,7 @@ def find_dotnet() -> str:
 
 def cli_command(cli_dir: Path) -> list[str]:
     """Launch the built headless program directly (faster than `dotnet run`)."""
-    cli_dir = Path(cli_dir)
+    cli_dir = Path(cli_dir).expanduser().resolve()
     built = sorted((cli_dir / "src" / "Sts2Headless" / "bin").glob("*/net*/Sts2Headless.dll"))
     if built:
         return [find_dotnet(), str(built[-1])]
@@ -518,9 +524,17 @@ class CliSession:
         if run.phase == sim.PHASE_CARD_REWARD and REWARD_SKIP in legal:
             self._forfeit("card reward")  # Prayer Wheel / White Star's extra one
             return REWARD_SKIP
-        if run.phase == sim.PHASE_REST and REWARD_SKIP in legal and len(legal) > 1:
-            self._forfeit("rest site")  # Miniature Tent's second option
-            return REWARD_SKIP
+        if run.phase == sim.PHASE_REST and self.room.get("rest_site"):
+            if any(int(r[0]) == miniature_tent() for r in run.relics()):
+                self._forfeit("rest site")  # Miniature Tent's second option
+                return REWARD_SKIP
+            # The rest's result page: the options not taken are still listed, but any move
+            # just leaves (RestResultPending). Asked of the agent all the same, so its
+            # random stream stays the same as its twin's.
+            action, _ = self.agent.act(run)
+            return action
+        if run.phase == sim.PHASE_EVENT and run.event_id == EVENT_RESULT_PENDING:
+            return int(choices(run)[0])  # an event's result page, which sts2-cli skips
         if len(legal) == 1 and run.phase == sim.PHASE_COMBAT and run.pending_selection() > 0:
             # A selection with one forced pick, which sts2-cli makes without a screen.
             # Asked of the agent all the same, so its search draws what it would have.
@@ -860,7 +874,8 @@ def smoke_test(cli_dir: Path | None, seed: str = "SMOKE00001", command: list[str
 
     Returns the problems found (empty means the engine runs and agrees with the shadow).
     """
-    names = Names(Path(cli_dir) / "localization_eng" if cli_dir else None)
+    cli_dir = Path(cli_dir).expanduser().resolve() if cli_dir else None
+    names = Names(cli_dir / "localization_eng" if cli_dir else None)
     seed = canonical_seed(seed)
     with CliGame(command or cli_command(cli_dir), cwd=cli_dir, timeout=180) as game:
         state = game.start_run(seed, ascension=8)

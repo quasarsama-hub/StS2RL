@@ -151,3 +151,24 @@ def test_chest_relic_matches_the_real_game():
                 assert sim_relic == live.relic_id(offered[0]["id"]), (data["seed"], offered[0]["id"])
                 checked += 1
     assert checked >= 1
+
+
+@pytest.mark.parametrize("name", ["7WGQ2VNJ4M-a8-buff400.json", "8QKMNR4T2W-a8-buff200.json"])
+def test_chest_relic_matches_in_runs_with_debug_buffs(name):
+    """The two chests in recorded runs that used debug HP buffs, which the bridge replay
+    above skips, checked with the simulator's own replay (it applies the buffs)."""
+    import sys
+
+    sys.path.insert(0, str(paths.SIM_ROOT / "scripts"))
+    import replay_full_run_trace as replay
+
+    payload = replay.load_payload(paths.SIM_ROOT / "tests" / "fixtures" / "run_trace" / name)
+    emulated = {st["step"]: st for st in replay.replay_trace(payload, emulator_seed=payload["seed"]).payload["trace"]}
+    checked = 0
+    for prev, cur in zip(payload["trace"], payload["trace"][1:]):
+        if (cur.get("raw_state") or {}).get("state_type") == "treasure" and (prev.get("raw_state") or {}).get("state_type") != "treasure":
+            offered = cur["raw_state"]["treasure"]["relics"]
+            items = emulated[cur["step"]]["summary"]["rewards"]["items"]
+            assert next(i["id"] for i in items if i["type"] == "relic") == live.relic_id(offered[0]["id"])
+            checked += 1
+    assert checked == 1

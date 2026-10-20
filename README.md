@@ -59,7 +59,7 @@ carries six patches for it (`patches/sts2/`):
 | `0003-agent-exports-and-crash-guards` | Native heuristic combat rollouts (20× faster than driving them from Python), and engine exceptions reported as an error status instead of aborting the process. |
 | `0004-end-turn-flush-snapshot` | Fixes a crash ("Collection was modified") when an end-of-turn exhaust draws a card mid-flush (e.g. Dark Embrace + Ethereal); the drawn card is flushed instead of vanishing. |
 | `0005-golden-path-unknown-rooms` | Golden Compass's single-column map typed its "?" rooms as *no node*, which the map screen can't move onto, so every Golden Compass run got stuck on its second floor. |
-| `0006-treasure-chest-relic` | Treasure chests paid their gold but **never their relic**: the game's `treasure_room_relics` RNG stream and shared relic bag were built and cloned but never drawn from, so every simulated run was a relic or two short by mid-Act 1. Chests now offer their relic on the reward screen (rarity rolled on that stream, drawn from the shared bag). Checked against every chest in the recorded real-game runs: **9 of 9 offer exactly the relic the game offered** (Vajra, Red Mask, Oddly Smooth Stone, Stone Cracker, …). |
+| `0006-treasure-chest-relic` | Treasure chests paid their gold but **never their relic**: the game's `treasure_room_relics` RNG stream and shared relic bag were built and cloned but never drawn from, so every simulated run was a relic or two short by mid-Act 1. Chests now offer their relic on the reward screen (rarity rolled on that stream, drawn from the shared bag). Checked against every chest in the recorded real-game runs: **11 of 11 offer exactly the relic the game offered** (Vajra, Red Mask, Oddly Smooth Stone, Stone Cracker, Blood Vial, …). Also, Silver Crucible ("the first Treasure Chest you open is empty") emptied every chest; now only the first. |
 
 The simulator's own test suite passes with all six patches applied (4,805 tests, including
 regression tests patches 5 and 6 add).
@@ -131,7 +131,7 @@ bash setup.sh                       # submodule + patches + native build + .venv
 source .venv/bin/activate
 
 python -m sts2rl.evaluate --agent heuristic --runs 16     # smoke test
-python -m pytest -q                                        # 57 tests, ~40 s
+python -m pytest -q                                        # 68 tests, ~40 s
 python -m sts2rl.watch --model models/best.pt --seed ANYSEED   # the trained agent
 ```
 
@@ -147,11 +147,16 @@ python -m sts2rl.train --name main --workers $(nproc) --iterations 200
 Each iteration plays `--runs-per-iter` self-play runs, trains, then evaluates on the
 **validation** seeds and puts the new checkpoint up against the current champion on those
 same seeds. It replaces the champion (`best.pt`) only if its run score is higher with
-p < 0.05 (paired sign-flip permutation test over seeds) *and* it clears no significantly
-fewer acts or wins (exact McNemar). A checkpoint that is merely not worse stays out — that
-is how noise becomes "the best checkpoint". Everything goes to `runs/main/`
-(`metrics.jsonl`, `latest.pt`, `best.pt`, `champion.json`, data shards). Stop it any
-time; the same command resumes.
+p < 0.05 (paired sign-flip permutation test over seeds) *and* it shows no significant
+drop in Act 1 clears or wins (exact McNemar). A checkpoint that is merely not worse stays
+out — that is how noise becomes "the best checkpoint". Each test stands on its own, so over
+a long run an occasional false promotion is still expected: confirm a final champion on
+the test split. The first champion is the checkpoint the run starts from (`best.pt`, or a
+`latest.pt` you put there to continue from), else the untrained heuristic. Everything goes
+to `runs/main/` (`metrics.jsonl`, `latest.pt`, `best.pt`, `champion.json`, data shards).
+Stop it any time; the same command resumes — the champion's cached results are reused
+only while the settings, the simulator build, the agent code and `best.pt` itself are
+unchanged.
 
 Seeds come in two disjoint splits: **validation** (`EVAL000000–000999`) is what training
 selects on; **test** (`EVAL001000+`) is never touched by training and is only for final
@@ -256,11 +261,11 @@ That makes it two tools in one:
 * **A fidelity test of the simulator against the game you own.** The first disagreement on
   each seed ends that run with its exact floor and reason ("enemy hp: game=[12] sim=[18]")
   and a full trace. That is precisely the evidence needed to fix the simulator.
-* **Real-engine results.** Seeds and agent settings match `sts2rl.evaluate`, so each run is
-  the twin of a simulator run, and a run that stays in sync to the end finishes exactly
-  where the simulator said it would (checked: 80 of 80 runs identical against the
-  stand-in engine below). Outcomes are reported only over the runs that were still in sync
-  when each was decided.
+* **Real-engine results.** Seeds and agent seeds match `sts2rl.evaluate` (and so do the
+  default `--sims`/`--samples`), so each run is the twin of the simulator run with the same
+  settings, and a run that stays in sync to the end finishes exactly where the simulator
+  said it would (checked: 80 of 80 runs identical against the stand-in engine below).
+  Outcomes are reported only over the runs that were still in sync when each was decided.
 
 ```bash
 bash scripts/setup_sts2cli.sh            # finds the game (WSL: /mnt/c/Program Files (x86)/Steam/...),
@@ -288,10 +293,12 @@ What the bench has to work around, and how:
 
 * **sts2-cli's own departures from the game.** It heals between acts the moment the boss
   dies and rounds the heal *up*; the game rounds down (a capture: 264/280 → 276), so the
-  setup script patches sts2-cli (`patches/sts2-cli/`). It shows only a room's first card
+  setup script patches sts2-cli (`patches/sts2-cli/`). It skips the result pages of events
+  and rest sites, and the shadow steps through them too. It shows only a room's first card
   reward (Prayer Wheel / White Star's extra ones are dropped) and first rest option
-  (Miniature Tent): the shadow forfeits the same, and each run counts its forfeits —
-  a run with one can end differently from its twin.
+  (Miniature Tent): the shadow forfeits the same, and each run counts its forfeits — a run
+  with one can end differently from its twin. A run that crashes its worker process is
+  re-run on its own and, if it crashes again, recorded as an error; the others carry on.
 * **Moves the simulator has and the game doesn't** (rerolling or sacrificing a card reward
   where sts2-cli has no command) are never chosen: the agent evaluates them but takes its
   best real move, and each run counts how often that happened. Walking away from an event

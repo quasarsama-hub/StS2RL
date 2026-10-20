@@ -5,6 +5,7 @@
 #   bash scripts/setup_sts2cli.sh                                  # find the game
 #   bash scripts/setup_sts2cli.sh "/path/to/Slay the Spire 2"
 #   STS2CLI_DIR=~/sts2-cli bash scripts/setup_sts2cli.sh            # where to put it
+#   STS2CLI_REVISIONS=origin/main bash scripts/setup_sts2cli.sh     # try other sts2-cli commits
 #
 # sts2-cli (github.com/wuhao21/sts2-cli, MIT) ships no game code: it copies sts2.dll and
 # friends out of YOUR install, IL-patches the copy so it runs without Godot, and builds a
@@ -26,11 +27,19 @@
 # Needs git, python3 and the .NET 9 SDK (setup.sh installs one into ~/.dotnet).
 set -euo pipefail
 
+# Paths given relative to where the script was run from, made absolute before anything
+# changes directory (sts2-cli's own setup.sh runs from inside its checkout).
+abspath() { case "$1" in /*) printf '%s\n' "$1" ;; *) printf '%s\n' "$PWD/$1" ;; esac; }
+CLI_DIR="$(abspath "${STS2CLI_DIR:-}")"
+GAME_ARG="${1:-${STS2_GAME_DIR:-}}"
+[ -n "$GAME_ARG" ] && GAME_ARG="$(abspath "$GAME_ARG")"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-CLI_DIR="${STS2CLI_DIR:-$ROOT/third_party/sts2-cli}"
+[ -n "${STS2CLI_DIR:-}" ] || CLI_DIR="$ROOT/third_party/sts2-cli"
 REPO="https://github.com/wuhao21/sts2-cli.git"
-REVISIONS=(d11aa883b582dd68bd39b331f3370746b30d447e 084d1aa3d8e118ca7ce8d8774ad16d6be9c92367)
+# shellcheck disable=SC2206
+REVISIONS=(${STS2CLI_REVISIONS:-d11aa883b582dd68bd39b331f3370746b30d447e 084d1aa3d8e118ca7ce8d8774ad16d6be9c92367})
 
 if [ -x "$HOME/.dotnet/dotnet" ]; then
   export DOTNET_ROOT="$HOME/.dotnet"
@@ -45,7 +54,7 @@ PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY=python3
 
 echo "==> game"
-GAME_DIR="${1:-${STS2_GAME_DIR:-}}"
+GAME_DIR="$GAME_ARG"
 if [ -z "$GAME_DIR" ]; then
   for candidate in \
     "/mnt/c/Program Files (x86)/Steam/steamapps/common/Slay the Spire 2" \
@@ -76,6 +85,9 @@ MARKER=".sts2rl-managed"
 if [ ! -e "$CLI_DIR" ]; then
   git clone --quiet "$REPO" "$CLI_DIR"
   touch "$CLI_DIR/$MARKER"
+elif [ -f "$CLI_DIR/.sts2rl-revision" ] && [ ! -f "$CLI_DIR/$MARKER" ]; then
+  touch "$CLI_DIR/$MARKER"  # built by an earlier version of this script
+  git -C "$CLI_DIR" fetch --quiet origin
 elif [ ! -f "$CLI_DIR/$MARKER" ]; then
   echo "$CLI_DIR exists but was not created by this script; it resets that checkout between" >&2
   echo "attempts, so it will not touch it. Remove it, or pick another STS2CLI_DIR." >&2
@@ -106,5 +118,6 @@ done
 
 echo >&2
 echo "No pinned sts2-cli revision builds against your game. If the game updated, sts2-cli's" >&2
-echo "newest commit may support it: git -C \"$CLI_DIR\" checkout origin/main && (cd \"$CLI_DIR\" && bash setup.sh \"$GAME_DIR\")" >&2
+echo "newest commit may support it (our patches are still applied, and may need updating):" >&2
+echo "  STS2CLI_REVISIONS=origin/main bash scripts/setup_sts2cli.sh \"$GAME_DIR\"" >&2
 exit 1

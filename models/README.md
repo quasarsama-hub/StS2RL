@@ -12,6 +12,9 @@ mkdir -p runs/main && cp models/best.pt runs/main/latest.pt
 python -m sts2rl.train --name main --workers $(nproc)
 ```
 
+The run takes this checkpoint as its first champion, so a fine-tune replaces it only by
+beating it in the paired test on the validation seeds.
+
 or use it directly:
 
 ```bash

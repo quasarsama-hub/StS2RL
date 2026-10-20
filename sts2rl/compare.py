@@ -63,7 +63,10 @@ def main() -> None:
     promote, why = promotion_decision(cmp, alpha=args.alpha)
     print(f"A: {format_summary(sa)}")
     print(f"B: {format_summary(sb)}")
-    print(report(cmp, args.a, args.b))
+    if cmp["pairs"]:
+        print(report(cmp, args.a, args.b))
+    else:
+        print(f"no seed played without an engine error by both A and B ({len(cmp['missing'])} errored)")
     print(f"  promotion gate (alpha {args.alpha}): {'B WOULD BE PROMOTED' if promote else 'B would not be promoted'} -- {why}")
     print(f"wall time {time.perf_counter() - t:.0f}s on the {args.split} split")
     if args.json:
