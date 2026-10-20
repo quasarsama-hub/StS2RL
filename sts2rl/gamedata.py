@@ -123,6 +123,19 @@ def potions() -> dict[int, Potion]:
 
 
 @cache
+def event_options() -> dict[int, tuple[str, int]]:
+    """Event id -> (the game's event entry, how many options its first page offers), from
+    the simulator's generated table. Events that build their options at run time (Welcome
+    to Wongos, Tea Master, ...) are not in it."""
+    text = (paths.GENERATED / "EventOptions.g.cs").read_text(encoding="utf-8")
+    # "19 => 3,  // has a locked variant   // WoodCarvings": the name is the last comment.
+    return {
+        int(i): (re.sub(r"(?<!^)(?=[A-Z])", "_", name).upper(), int(n))
+        for i, n, name in re.findall(r"(\d+) => (\d+),.*// (\w+)\s*$", text, re.M)
+    }
+
+
+@cache
 def card_pool(name: str) -> tuple[int, ...]:
     text = (paths.GENERATED / "CardPools.g.cs").read_text(encoding="utf-8")
     match = re.search(rf"ReadOnlySpan<int>\s+{name}\s*=>\s*\[([^\]]*)\]", text)

@@ -1,0 +1,50 @@
+diff --git a/src/Sts2Emulator.Tests/Relics/CardRewardScreenRelicTests.cs b/src/Sts2Emulator.Tests/Relics/CardRewardScreenRelicTests.cs
+index 6be0648..773d029 100644
+--- a/src/Sts2Emulator.Tests/Relics/CardRewardScreenRelicTests.cs
++++ b/src/Sts2Emulator.Tests/Relics/CardRewardScreenRelicTests.cs
+@@ -51,6 +51,28 @@ public class CardRewardScreenRelicTests
+         );
+     }
+ 
++    /// <summary>
++    /// The observation carries the extra option in its own block at the end of the run
++    /// block, and nowhere else -- it used to be written into the deck block.
++    /// </summary>
++    [Fact]
++    public void TheFourthOptionIsObservedInItsOwnBlock()
++    {
++        var engine = CandyAtTriggeringCombat(2);
++        var obs = new int[RunConstants.RunObsSize];
++        engine.WriteObservation(obs);
++
++        int at = RunConstants.CombatObsSize + RunConstants.FourthRewardObsOffset;
++        Assert.Equal(engine.State.LastingCandyRewardCard, obs[at]);
++        int deckEnd = RunConstants.CombatObsSize + RunConstants.DeckObsOffset
++            + engine.State.Deck.Count * RunConstants.DeckSlotSize;
++        int relics = RunConstants.CombatObsSize + RunConstants.RelicObsOffset;
++        for (int i = deckEnd; i < relics; i++)
++        {
++            Assert.Equal(0, obs[i]);
++        }
++    }
++
+     /// <summary>And not on the others, which is the clock `LastingCandyTests` pins.</summary>
+     [Fact]
+     public void TheCandyAddsNothingOnANonTriggeringCombat()
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index b34c4f4..9bd9ac3 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -997,8 +997,10 @@ public sealed class RunEngine
+         obs[offset + 11] = State.RewardCards[2];
+         // The FOURTH option lives at the end of the observation rather than here, so that
+         // adding it moved nothing. See `RunConstants.FourthRewardObsOffset`.
+-        obs[RunConstants.FourthRewardObsOffset] = State.LastingCandyRewardCard;
+-        obs[RunConstants.FourthRewardObsOffset + 1] = State.LastingCandyRewardUpgraded ? 1 : 0;
++        // Run-block relative, like every offset in RunConstants. Written without `offset`
++        // it landed in the deck block's 27th slot instead (and was overwritten there).
++        obs[offset + RunConstants.FourthRewardObsOffset] = State.LastingCandyRewardCard;
++        obs[offset + RunConstants.FourthRewardObsOffset + 1] = State.LastingCandyRewardUpgraded ? 1 : 0;
+         for (int i = 0; i < RunConstants.MapChoices; i++)
+         {
+             // Types only. What is BEHIND a node is not on the game's map -- see

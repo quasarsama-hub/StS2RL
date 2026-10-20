@@ -10,14 +10,17 @@ potions are reported by title, cards by "CARD.<ENTRY>". Events show only real op
 the simulator's walk-away action has no button in the game.
 
 FAKE_STS2CLI_FAULT=hp:<floor> makes it report one HP less than the truth from that floor
-on, so a test can check the bench notices.
+on, so a test can check the bench notices; FAKE_STS2CLI_FAULT=ceil-heal rounds the
+between-act heal up, as unpatched sts2-cli does.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -41,6 +44,9 @@ class Engine:
         self.run = sim.Run.new(seed)
         self.act_start = {1: self.run.floor}
         self.rested = False
+        self.card_rewards_shown = 0  # in this room
+        self.fight_rewards = False  # the reward screen up now is a fight's
+        self.ancients_seen = {1}  # acts whose ancient has been entered (Neow: at once)
         self.advance()
 
     # -- the engine's own housekeeping --------------------------------------------------
@@ -50,9 +56,27 @@ class Engine:
         for _ in range(64):
             ph = run.phase
             legal = [int(a) for a in run.legal()]
+            if ph == sim.PHASE_COMBAT:
+                self.fight_rewards = True
+            elif ph in (sim.PHASE_MAP, sim.PHASE_EVENT, sim.PHASE_ANCIENT, sim.PHASE_SHOP, sim.PHASE_REST):
+                self.fight_rewards = False
+            if ph == sim.PHASE_MAP:
+                self.card_rewards_shown = 0
+            if ph == sim.PHASE_ANCIENT:
+                self.ancients_seen.add(F.ACT_ORDINAL.get(run.act_id, 1))
             if ph == sim.PHASE_RELIC_REWARD:
-                gold, potion, relic, cards = run.state_list(6, 4)
-                run.step(0 if (gold or potion or relic or cards) else REWARD_SKIP)  # in reward order
+                gold, potion, relic, _ = run.state_list(6, 4)
+                if gold or potion or relic:
+                    run.step(0)  # gold, potions and relics are taken by themselves, in order
+                    continue
+                cards = [a for a in legal if a < REWARD_SKIP]
+                if cards and not (self.in_combat_room() and self.card_rewards_shown):
+                    run.step(cards[0])  # a card reward is a screen -- only a fight's first
+                    continue
+                run.step(REWARD_SKIP)
+                continue
+            if ph == sim.PHASE_CARD_REWARD and self.in_combat_room() and self.card_rewards_shown:
+                run.step(REWARD_SKIP)  # Prayer Wheel / White Star's extra one: never shown
                 continue
             if ph == cli.PHASE_TREASURE:
                 run.step(REWARD_SKIP)
@@ -75,13 +99,22 @@ class Engine:
         act = F.ACT_ORDINAL.get(run.act_id, 1)
         self.act_start.setdefault(act, run.floor)
 
+    def in_combat_room(self) -> bool:
+        # sts2-cli puts only a fight's first card reward on screen; an event's (Neow's
+        # Kaleidoscope, Glass Eye) are each shown, through its pending-reward path.
+        return self.fight_rewards
+
     # -- what it shows -----------------------------------------------------------------
 
     def player(self) -> dict:
         run = self.run
         hp = run.hp
-        if cli.at_act_start(run):
-            hp += int((run.max_hp - run.hp) * cli.BETWEEN_ACT_HEAL)  # healed when the boss died
+        act = F.ACT_ORDINAL.get(run.act_id, 1)
+        if run.phase == sim.PHASE_MAP and act not in self.ancients_seen:
+            # HealBetweenActs, applied when the boss died; the simulator heals on the
+            # ancient. Decimal * 0.8m, then (int): rounded down (Math.Ceiling unpatched).
+            heal = Decimal(run.max_hp - run.hp) * Decimal("0.8")
+            hp += math.ceil(heal) if FAULT == "ceil-heal" else int(heal)
         if FAULT.startswith("hp:") and run.floor >= int(FAULT[3:]):
             hp -= 1
         pots = run.combat_potions() if run.phase == sim.PHASE_COMBAT else list(run.potions())
@@ -143,7 +176,10 @@ class Engine:
             enemies = [{"index": k, "hp": e[0], "max_hp": e[1], "block": e[2]} for k, e in enumerate(e for e in run.enemies() if e[0] > 0)]
             return {**base, "decision": "combat_play", "hand": hand, "enemies": enemies, "energy": run.energy}
         if ph == sim.PHASE_CARD_REWARD:
-            cards = [self.card(int(run.obs[sim.C + 9 + i]), False, i) for i in range(3) if int(run.obs[sim.C + 9 + i])]
+            ids = [int(run.obs[sim.C + 9 + i]) for i in range(3) if int(run.obs[sim.C + 9 + i])]
+            fourth = int(run.obs[sim.C + sim.LAYOUT["fourth_reward_offset"]])  # Lasting Candy
+            cards = [self.card(c, False, i) for i, c in enumerate(ids + ([fourth] if fourth else []))]
+            self.card_rewards_shown += 1
             return {**base, "decision": "card_reward", "cards": cards, "can_skip": True}
         if ph == sim.PHASE_MAP:
             choices = [{"col": c[0], "row": c[1]} for c in run.map_choice_coords() if c is not None]
@@ -157,8 +193,13 @@ class Engine:
             potions = [{"index": i, "name": NAMES.potion(p), "is_stocked": bool(p)} for i, p in enumerate(run.state_list(10, 3))]
             return {**base, "decision": "shop", "cards": cards, "relics": relics, "potions": potions}
         if ph in (sim.PHASE_EVENT, sim.PHASE_ANCIENT):
-            legal = {int(a) for a in run.legal()} - ({cli.EVENT_SKIP} if ph == sim.PHASE_EVENT else set())
-            n = max(legal) + 1 if legal else 0
+            from sts2rl import gamedata as gd
+
+            legal = {int(a) for a in run.legal()}
+            # The event's own option list: its fixed count when the simulator's table has
+            # one (the walk-away action is not an option), else whatever is offered.
+            known = gd.event_options().get(run.event_id) if ph == sim.PHASE_EVENT else None
+            n = known[1] if known else (max(legal) + 1 if legal else 0)
             if ph == sim.PHASE_ANCIENT:
                 keys = [f"NEOW.pages.INITIAL.options.{cli.relic_entry(r)}" for r in run.state_list(3, 3) if r]
             else:
@@ -201,13 +242,13 @@ class Engine:
             where = {pos: a for pos, a in enumerate(sorted(cli.selection_options(run)))}
             for position in ([int(p) for p in args["indices"].split(",")] if name == "select_cards" else []):
                 action = where.pop(position)
-                deck_before = [(int(c[0]), bool(c[1])) for c in run.deck()]
+                deck_before = [tuple(int(x) for x in c) for c in run.deck()]
                 count = len(cli.selection_options(run))
                 self.step(action)
                 if not self._selection_open():
                     break
                 if deck_mode:
-                    moved = cli.follow_deck(deck_before, [(int(c[0]), bool(c[1])) for c in run.deck()], action)
+                    moved = cli.follow_deck(deck_before, [tuple(int(x) for x in c) for c in run.deck()], action)
                     where = {pos: moved[a] for pos, a in where.items()}
                 elif len(cli.selection_options(run)) == count - 1:
                     where = {pos: a - (a > action) for pos, a in where.items()}
@@ -216,7 +257,8 @@ class Engine:
                 if done:
                     self.step(done[0])
         elif name == "select_card_reward":
-            self.step(int(args["card_index"]))
+            index = int(args["card_index"])
+            self.step(5 if index == 3 else index)  # the fourth card is Lasting Candy's, action 5
         elif name == "skip_card_reward":
             self.step(REWARD_SKIP)
         elif name == "select_map_node":

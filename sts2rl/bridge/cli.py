@@ -36,14 +36,13 @@ from pathlib import Path
 from .. import features as F
 from .. import gamedata as gd
 from .. import sim
-from ..agent import BUNDLE_CONFIRM, PHASE_BUNDLE_SELECT, REWARD_SKIP, Agent, choices
+from ..agent import BUNDLE_CONFIRM, EVENT_RESULT_PENDING, PHASE_BUNDLE_SELECT, REWARD_SKIP, Agent, choices
 
 PHASE_TRANSFORM_SELECT = 9
 PHASE_TREASURE = 10
 SHOP_REMOVE = 13
 SHOP_LEAVE = 14
 EVENT_SKIP = 3  # the simulator's "walk away from the event"; the game has no such button
-EVENT_RESULT_PENDING = -1  # the simulator's event id for an event's result (Proceed) page
 REWARD_FOURTH_CARD = 5  # Lasting Candy's extra card; 4 (Pael's Wing) and 6 (reroll) have no command
 # A8 carries Weary Traveler: the heal entering an act is 80% of the missing HP, rounded
 # down (a capture: 264/280 -> 276). sts2-cli applies it as soon as the boss dies.
@@ -114,15 +113,9 @@ def card_entry(cid: int) -> str:
     return (c.entry or _snake_upper(c.name)) if c else f"CARD_{cid}"
 
 
-@cache
 def event_entry_by_id() -> dict[int, str]:
-    """Simulator event id -> the game's event entry ("UNREST_SITE"), from the simulator's
-    generated option table (events whose options are built at run time are not in it)."""
-    from .. import paths
-
-    text = (paths.GENERATED / "EventOptions.g.cs").read_text(encoding="utf-8")
-    # "19 => 3,  // has a locked variant   // WoodCarvings": the name is the last comment.
-    return {int(i): _snake_upper(name) for i, name in re.findall(r"(\d+) => \d+,.*// (\w+)\s*$", text, re.M)}
+    """Simulator event id -> the game's event entry ("UNREST_SITE")."""
+    return {i: entry for i, (entry, _) in gd.event_options().items()}
 
 
 def _strip_bbcode(text: str) -> str:
@@ -316,10 +309,11 @@ def follow_deck(before: list, after: list, picked: int) -> dict[int, int] | None
     rest = before[:picked] + before[picked + 1 :]
     shift = {i: i - (i > picked) for i in range(len(before)) if i != picked}
     same = {i: i for i in range(len(before)) if i != picked}
+    if len(after) >= len(before) and all(after[i] == before[i] for i in same):
+        return same  # changed in place, possibly with a card appended (tried first: when
+        #              only identical cards follow the pick, the shapes look alike)
     if after == rest or (len(after) == len(before) and after[:-1] == rest):
         return shift  # removed, or removed and its replacement appended
-    if len(after) >= len(before) and all(after[i] == before[i] for i in same):
-        return same  # changed in place, possibly with a card appended
     return None
 
 
@@ -338,6 +332,14 @@ def shadow_matches(decision: str, run: sim.Run) -> bool:
         "bundle_select": ph == PHASE_BUNDLE_SELECT,
         "game_over": ph == sim.PHASE_COMPLETE,
     }.get(decision, False)
+
+
+def reward_cards(run: sim.Run) -> list[int]:
+    """The card reward on screen: three cards, and Lasting Candy's fourth when it offers one
+    (observed in its own block since patch 0007)."""
+    cards = [int(run.obs[sim.C + 9 + i]) for i in range(3) if int(run.obs[sim.C + 9 + i])]
+    fourth = int(run.obs[sim.C + sim.LAYOUT["fourth_reward_offset"]])
+    return cards + [fourth] if fourth else cards
 
 
 def at_act_start(run: sim.Run) -> bool:
@@ -411,7 +413,12 @@ class CliSession:
         state = self.game.act(action, **args)
         self.log(kind="command", action=action, args=args, answer=state.get("decision") or state.get("type"))
         if state.get("type") == "error":
-            raise CliError(f"engine refused {action} {args}: {state.get('message')}")
+            if state.get("stack_trace"):
+                # An exception inside sts2-cli: the engine broke, not the shadow.
+                raise CliError(f"engine failed on {action} {args}: {state.get('message')}")
+            # A rule refusal ("Not enough gold", "Invalid card index", ...): the simulator
+            # thought the move legal and the game does not -- a divergence.
+            raise Desync(f"engine refused {action} {args}: {state.get('message')}")
         return state
 
     # -- the loop ----------------------------------------------------------------------
@@ -511,12 +518,17 @@ class CliSession:
             # rewards (the screen's order; a potion with the belt full is lost, in both),
             # and shows a card reward as a screen of its own. It shows only the first card
             # reward of a fight, so any further one is left on the shadow's screen too.
-            gold, potion, relic, cards = run.state_list(6, 4)
-            items = ["gold"] * bool(gold) + ["potion"] * bool(potion) + ["relic"] * bool(relic) + ["card"] * int(cards)
-            for index, item in enumerate(items):
-                if (item != "card" or decision == "card_reward") and index in legal:
+            gold, potion, relic, _ = run.state_list(6, 4)
+            plain = int(bool(gold)) + int(bool(potion)) + int(bool(relic))
+            for index in range(plain):
+                if index in legal:
                     return index
-            if "card" in items:
+            # Card items follow, and are read off the mask: a queued offer (Glass Eye's
+            # five, The Hunt's extra one) carries no flag of its own.
+            cards = [a for a in legal if plain <= a < REWARD_SKIP]
+            if cards and decision == "card_reward":
+                return cards[0]
+            if cards:
                 self._forfeit("card reward")
             return REWARD_SKIP
         if run.phase == PHASE_TREASURE and REWARD_SKIP in legal:
@@ -625,10 +637,8 @@ class CliSession:
             if sim_nodes != game_nodes and not (self.at_act_start() and sim_nodes <= game_nodes):
                 diffs.append(f"map choices: game={sorted(game_nodes)} sim={sorted(sim_nodes)}")
         elif decision == "card_reward":
-            # Lasting Candy's fourth card lives elsewhere in the observation; the three
-            # ordinary ones are compared.
-            game_cards = [card_id(c.get("id", "")) for c in state.get("cards") or []][:3]
-            sim_cards = [int(run.obs[sim.C + 9 + i]) for i in range(3) if int(run.obs[sim.C + 9 + i])]
+            game_cards = [card_id(c.get("id", "")) for c in state.get("cards") or []]
+            sim_cards = reward_cards(run)
             check("card reward", [gd.card_name(c) for c in game_cards], [gd.card_name(c) for c in sim_cards])
         elif decision == "shop":
             game_stock = Counter(
@@ -684,13 +694,11 @@ class CliSession:
         if decision == "card_reward":
             if action == REWARD_SKIP:
                 return Move([("skip_card_reward", {})], [(action, -1)])
-            if action == REWARD_FOURTH_CARD:
-                return Move([("select_card_reward", {"card_index": 3})], [(action, -1)])
-            cards = state.get("cards") or []
-            mine = int(run.obs[sim.C + 9 + action]) if action < 3 else 0
-            if action >= len(cards) or card_id(cards[action].get("id", "")) != mine:
-                raise Desync(f"card reward {action} ({gd.card_name(mine)}) is not on the engine's screen")
-            return Move([("select_card_reward", {"card_index": action})], [(action, -1)])
+            index = 3 if action == REWARD_FOURTH_CARD else action  # Lasting Candy's card is the engine's 4th
+            cards, mine = state.get("cards") or [], reward_cards(run)
+            if index >= min(len(cards), len(mine)) or card_id(cards[index].get("id", "")) != mine[index]:
+                raise Desync(f"card reward {index} is not the same card on the engine's screen")
+            return Move([("select_card_reward", {"card_index": index})], [(action, -1)])
         if decision == "rest_site":
             if action == REWARD_SKIP:
                 return Move([("leave_room", {})], [(action, -1)])
@@ -722,10 +730,11 @@ class CliSession:
         run = self.shadow
         legal = [int(a) for a in run.legal()]
         if decision == "event_choice":
+            # An engine option at the same index is the move (at Welcome to Wongos, action 3
+            # is the game's Leave); the simulator's walk-away has no engine option and drops out.
             options = state.get("options") or []
             open_ = {i for i, o in enumerate(options) if not o.get("is_locked")}
-            skip = EVENT_SKIP if run.phase == sim.PHASE_EVENT else None
-            return [a for a in legal if a in open_ and a != skip]
+            return [a for a in legal if a in open_]
         if decision == "card_reward":
             n = len(state.get("cards") or [])
             return [a for a in legal if a < min(n, 3) or a == REWARD_SKIP or (a == REWARD_FOURTH_CARD and n >= 4)]
@@ -743,6 +752,8 @@ class CliSession:
             game_hand = state.get("hand") or []
             if action >= len(game_hand) or card_id(game_hand[action].get("id", "")) != hand[action][0]:
                 raise Desync(f"hand slot {action} differs between engine and simulator")
+            if game_hand[action].get("can_play") is False:
+                raise Desync(f"the simulator plays {gd.card_name(hand[action][0])}, which the engine says cannot be played")
             args = {"card_index": action}
             if game_hand[action].get("target_type") == "AnyEnemy" and ordinal is not None:
                 args["target_index"] = ordinal
@@ -810,8 +821,9 @@ class CliSession:
                 return run.phase == sim.PHASE_COMBAT and run.pending_selection() > 0
             return (run.phase, tuple(run.state_list(20, 3))) == signature
 
-        def deck_now() -> list[tuple[int, bool]]:
-            return [(int(c[0]), bool(c[1])) for c in run.deck()]
+        def deck_now() -> list[tuple[int, ...]]:
+            # Every column, so an in-place enchant is a visible change.
+            return [tuple(int(x) for x in c) for c in run.deck()]
 
         while True:
             if len(steps) >= MAX_PICKS:

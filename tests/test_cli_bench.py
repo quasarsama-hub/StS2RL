@@ -50,6 +50,23 @@ def test_crossing_into_act_2_with_the_engines_between_act_heal():
     assert result.final_floor > 18
 
 
+def test_unpatched_sts2cli_heal_rounding_is_caught(monkeypatch):
+    # Upstream sts2-cli rounds the between-act heal up; the game rounds down (and
+    # patches/sts2-cli/0001 makes sts2-cli do so). The stand-in heals by its own copy of
+    # sts2-cli's formula, so this checks the bench's expectation, not a shared constant.
+    monkeypatch.setenv("FAKE_STS2CLI_FAULT", "ceil-heal")
+    result = bench("EVAL000013", agent_seed=7_000_013, max_act=2)
+    assert not result.in_sync and result.desync_floor == 17
+    assert result.desync_reason.startswith("hp (between-act heal): game=73 sim=72")
+
+
+def test_a_fights_extra_card_reward_is_forfeited_not_desynced():
+    # sts2-cli shows only a fight's first card reward; the shadow gives up the second too,
+    # and the run counts it.
+    result = bench("EVAL000160", agent_seed=7_000_160)
+    assert result.in_sync and result.forfeits == 1
+
+
 def test_the_first_divergence_is_reported_with_its_floor(monkeypatch):
     monkeypatch.setenv("FAKE_STS2CLI_FAULT", "hp:3")
     result = bench("EVAL000000")
@@ -82,6 +99,25 @@ def test_deck_selections_are_followed_through_every_kind_of_change():
     assert cli.follow_deck(deck, deck + [(2, False)], 1) == {0: 0, 2: 2, 3: 3}
     # anything else is not followed
     assert cli.follow_deck(deck, [(3, True), (1, False), (1, False)], 1) is None
+    # an enchant changes only the picked card, even when identical cards follow it
+    pommels = [(5, 0, 0, 0), (7, 0, 0, 0), (7, 0, 0, 0)]
+    assert cli.follow_deck(pommels, [(5, 0, 0, 0), (7, 0, 4, 1), (7, 0, 0, 0)], 1) == {0: 0, 2: 2}
+
+
+def test_the_agent_never_walks_away_from_an_event_the_game_cannot_leave():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from sts2rl import agent
+
+    def page(event_id):
+        return SimpleNamespace(phase=sim.PHASE_EVENT, event_id=event_id, legal=lambda: np.array([0, 1, 3]))
+
+    unrest = next(i for i, (entry, _) in cli.gd.event_options().items() if entry == "UNREST_SITE")
+    assert list(agent.choices(page(unrest))) == [0, 1]  # two options; 3 is the simulator's walk-away
+    assert list(agent.choices(page(-1))) == [0, 1]  # a result page: every move proceeds
+    assert list(agent.choices(page(41))) == [0, 1, 3]  # Welcome to Wongos: 3 is the game's Leave
 
 
 def test_ids_and_titles():

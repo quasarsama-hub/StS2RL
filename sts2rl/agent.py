@@ -21,6 +21,7 @@ import numpy as np
 
 from . import combat
 from . import features as F
+from . import gamedata as gd
 from . import sim
 from .model import ValueNet
 
@@ -62,17 +63,24 @@ class RunRecord:
     combats: int = 0
 
 
+EVENT_RESULT_PENDING = -1  # the simulator's event id for an event's result (Proceed) page
+
+
 def choices(run: sim.Run) -> np.ndarray:
     """The legal moves a player of the real game has.
 
-    The simulator lets a run walk away from any event without choosing (its event "skip").
-    The game has no such button: in recorded real runs that action only ever stands for
-    the Proceed on an event's result page, where it is the one move there is. So on a
-    page that offers real options, it is left out.
+    The simulator lets a run walk away from any event without choosing (its event "skip",
+    action 3). The game has no such button: in recorded real runs that action only stands
+    for Proceed on a result page. So it is left out wherever it cannot be a real option --
+    on result pages (where any move proceeds) and on events whose first page has at most
+    three options. Events that build their option list at run time keep it: at Welcome to
+    Wongos, action 3 is the game's own Leave.
     """
     legal = run.legal()
     if run.phase == sim.PHASE_EVENT and len(legal) > 1:
-        legal = legal[legal != sim.EVENT_SKIP]
+        options = gd.event_options().get(run.event_id)
+        if run.event_id == EVENT_RESULT_PENDING or (options is not None and options[1] <= sim.EVENT_SKIP):
+            legal = legal[legal != sim.EVENT_SKIP]
     return legal
 
 
