@@ -1,0 +1,126 @@
+diff --git a/src/Sts2Emulator.Tests/DirectCardRewardTests.cs b/src/Sts2Emulator.Tests/DirectCardRewardTests.cs
+new file mode 100644
+index 0000000..fd78e85
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/DirectCardRewardTests.cs
+@@ -0,0 +1,73 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Events that open their card rewards directly -- the Trial's Guilty verdict on a
++/// Nondescript defendant (two), Colorful Philosophers (three) -- offer every one of them,
++/// one screen after another. Answering the first used to go straight on to the map, and
++/// the rest stayed queued, flagged as pending, for whatever rewards screen came next.
++/// </summary>
++public class DirectCardRewardTests
++{
++    private static RunEngine AtEvent(int eventId, int page = 0)
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        engine.State.Phase = RunPhase.Event;
++        engine.State.EventId = eventId;
++        engine.State.EventPage = page;
++        return engine;
++    }
++
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    /// <summary>Answers every screen in turn (taking a card or skipping) and lists them.</summary>
++    private static System.Collections.Generic.List<int[]> AnswerAll(RunEngine engine, int action)
++    {
++        var screens = new System.Collections.Generic.List<int[]>();
++        while (engine.State.Phase == RunPhase.CardReward)
++        {
++            screens.Add([.. engine.State.RewardCards.Where(id => id != 0)]);
++            Step(engine, action);
++        }
++
++        return screens;
++    }
++
++    [Theory]
++    [InlineData(0)] // take the first card each time
++    [InlineData(RunConstants.RewardSkipAction)]
++    public void TheTrialsGuiltyVerdictOffersBothCardRewards(int answer)
++    {
++        var engine = AtEvent(RunConstants.EventTrial, page: 3);
++        Step(engine, 0);
++        int[] first = [.. engine.State.RewardCards];
++        int[] second = engine.State.PendingCardOffers.Single();
++        int deck = engine.State.Deck.Count;
++
++        var screens = AnswerAll(engine, answer);
++
++        Assert.Equal(new[] { first.Where(id => id != 0).ToArray(), second }, screens);
++        Assert.Equal(deck + (answer == 0 ? 2 : 0), engine.State.Deck.Count);
++        Assert.Equal(RunPhase.Map, engine.State.Phase);
++        Assert.False(RunRewardGenerator.HasPendingRewards(engine.State));
++    }
++
++    [Fact]
++    public void ColorfulPhilosophersOfferAllThreeCardRewards()
++    {
++        var engine = AtEvent(RunConstants.EventColorfulPhilosophers);
++        Step(engine, 0);
++
++        var screens = AnswerAll(engine, 0);
++
++        Assert.Equal(3, screens.Count);
++        Assert.All(screens, screen => Assert.Equal(3, screen.Length));
++        Assert.False(RunRewardGenerator.HasPendingRewards(engine.State));
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index d1d8185..d78b90d 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -1905,6 +1905,18 @@ public sealed class RunEngine
+             return 0;
+         }
+ 
++        // The Trial and Colorful Philosophers open their first card reward directly and
++        // queue the rest: OfferCustom's CardRewards are answered one after another, each
++        // its own screen. With no rewards screen to return to, answering the first went
++        // straight on to the map and left the others queued -- and flagged pending -- for
++        // whatever rewards screen came next. (Neither is a card reward on a SCREEN, so
++        // neither sets RewardCardPending any more; nor does Dream Catcher's.)
++        if (!State.ReturnToRewardScreenAfterCardReward && State.PendingCardOffers.Count > 0)
++        {
++            RunRewardGenerator.OfferFirstPendingCardOffer(State);
++            return 0;
++        }
++
+         if (State.ReturnToRewardScreenAfterCardReward)
+         {
+             State.ReturnToRewardScreenAfterCardReward = false;
+@@ -2137,7 +2149,6 @@ public sealed class RunEngine
+                 State.RewardCards[i] = offer[i];
+             }
+ 
+-            State.RewardCardPending = true;
+             State.Phase = RunPhase.CardReward;
+         }
+     }
+@@ -5260,7 +5271,6 @@ public sealed class RunEngine
+                     State.RewardCards[i] = first[i];
+                 }
+ 
+-                State.RewardCardPending = true;
+                 State.PendingCardOffers.Add(second);
+                 State.Phase = RunPhase.CardReward;
+                 return 0;
+@@ -5407,7 +5417,6 @@ public sealed class RunEngine
+             State.RewardCards[i] = offers[0][i];
+         }
+ 
+-        State.RewardCardPending = true;
+         State.PendingCardOffers.AddRange(offers.Skip(1));
+         State.Phase = RunPhase.CardReward;
+     }

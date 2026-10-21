@@ -288,6 +288,10 @@ class Engine:
         elif name == "remove_card":
             self.step(cli.SHOP_REMOVE)
         elif name == "leave_room":
+            if run.phase == sim.PHASE_REST and any(int(a) in cli.REST_IDS for a in run.legal()):
+                # Stricter than sts2-cli, which forces its way to the map: the game's Proceed
+                # is off while a rest option is on, so a bench that sends this is wrong.
+                raise Refusal("Cannot leave the rest site before choosing an option")
             self.step(cli.SHOP_LEAVE if run.phase == sim.PHASE_SHOP else REWARD_SKIP)
         elif name == "select_bundle":
             self.step(int(args["bundle_index"]))

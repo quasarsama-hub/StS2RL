@@ -1,9 +1,9 @@
 diff --git a/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs b/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs
 new file mode 100644
-index 0000000..d8e77f0
+index 0000000..95de191
 --- /dev/null
 +++ b/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,128 @@
 +using Sts2Emulator.Core;
 +using Sts2Emulator.Core.Effects;
 +using Sts2Emulator.Core.Run;
@@ -50,15 +50,61 @@ index 0000000..d8e77f0
 +    }
 +
 +    [Fact]
-+    public void SkippingGivesUpTheBonusRelicsStillQueued()
++    public void SkippingGivesUpTheRelicAndTheBonusRelicsQueuedBehindIt()
 +    {
 +        var engine = Screen();
++        engine.State.RelicReward = RunRewardGenerator.NextRelic(engine.State);
 +        engine.State.PendingBonusRelicRewards.Add(RunRewardGenerator.NextRelic(engine.State));
 +
 +        Skip(engine);
 +
 +        Assert.Empty(engine.State.PendingBonusRelicRewards);
 +        Assert.Equal(0, engine.State.RelicReward);
++    }
++
++    /// <summary>
++    /// Skip is also the plain Proceed off an emptied screen, so what was never on the
++    /// screen stays: an Orrery bought at the shop owes its five card rewards still.
++    /// </summary>
++    [Fact]
++    public void ProceedingOffAnEmptiedScreenKeepsWhatWasNotOnIt()
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        engine.State.ExtraCardRewardsOwed = 5;
++        RunRewardGenerator.EnterTreasureRoom(engine.State);
++        Assert.Equal(0, engine.Step(0, -1, out _, out _, out _)); // the chest's relic
++
++        Skip(engine);
++
++        Assert.Equal(5, engine.State.ExtraCardRewardsOwed);
++    }
++
++    /// <summary>
++    /// Neow's Bones offers its two relics WithSkippingDisallowed: no skipping either, so
++    /// both are claimed and the curse lands with the second rather than at some later
++    /// relic claim.
++    /// </summary>
++    [Fact]
++    public void NeowsBonesScreenCannotBeLeftWhileARelicIsOnIt()
++    {
++        var engine = new RunEngine();
++        engine.Reset("J09SPL8Y3V");
++        engine.State.Phase = RunPhase.Ancient;
++        engine.State.NeowOptions[0] = RunConstants.RelicNeowsBones;
++        var mask = new int[RunConstants.MaxActions];
++        engine.Step(0, -1, out _, out _, out _);
++
++        for (int claim = 0; claim < 2; claim++)
++        {
++            engine.WriteActionMask(mask);
++            Assert.Equal(0, mask[RunConstants.RewardSkipAction]);
++            Assert.Equal(0, engine.Step(0, -1, out _, out _, out _));
++        }
++
++        // The second claim closes the screen by itself, back to Neow, curse added.
++        Assert.False(engine.State.PendingNeowsBonesCurse);
++        Assert.Equal(RunPhase.Ancient, engine.State.Phase);
 +    }
 +
 +    /// <summary>
@@ -87,22 +133,50 @@ index 0000000..d8e77f0
 +    }
 +}
 diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
-index 9bd9ac3..3507687 100644
+index 9bd9ac3..4cdfa2d 100644
 --- a/src/Sts2Emulator/Core/Run/RunEngine.cs
 +++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
-@@ -1954,6 +1954,15 @@ public sealed class RunEngine
+@@ -749,7 +749,13 @@ public sealed class RunEngine
+ 
+             case RunPhase.RelicReward:
+                 WriteRewardActionMask(mask);
+-                SetMask(mask, RunConstants.RewardSkipAction);
++                // Neow's Bones offers its two relics WithSkippingDisallowed: the screen
++                // cannot be left while one of them is still on it to claim.
++                if (!(State.PendingNeowsBonesCurse && mask[0] != 0))
++                {
++                    SetMask(mask, RunConstants.RewardSkipAction);
++                }
++
+                 break;
+ 
+             case RunPhase.Event:
+@@ -1954,6 +1960,28 @@ public sealed class RunEngine
              // wrong for every event, whose second queued potion is declined far more often
              // than it is taken.
              State.PendingPotionRewards.Clear();
 +            // And everything else on it: the card reward and the offers queued behind it,
-+            // Kaleidoscope's, Prayer Wheel's still owed, the bonus relics. Only the potions
++            // Kaleidoscope's, the relic and the bonus relics queued behind it, and Prayer
++            // Wheel's reward still owed for the card reward given up. Only the potions
 +            // went, so the rest stayed in the state and came back on a later screen that
 +            // never had them -- an event's potion offer resets gold, relic and potion only,
-+            // and an unclaimed Prayer Wheel reward added up fight after fight.
++            // and an unclaimed Prayer Wheel reward added up fight after fight. What is NOT
++            // on this screen stays: this is also the plain Proceed off an emptied screen,
++            // and an Orrery bought at the shop owes its five whatever screen comes next.
++            bool cardOnScreen = State.RewardCardPending || State.PendingCardOffers.Count > 0;
++            bool relicOnScreen = State.RelicReward != 0;
 +            RunRewardGenerator.ClearRewardScreen(State);
 +            State.PendingOtherCharacterCardRewards = 0;
-+            State.PendingBonusRelicRewards.Clear();
-+            State.ExtraCardRewardsOwed = 0;
++            if (relicOnScreen)
++            {
++                State.PendingBonusRelicRewards.Clear();
++            }
++
++            if (cardOnScreen)
++            {
++                State.ExtraCardRewardsOwed = 0;
++            }
++
              return LeaveRewardScreen(out terminal);
          }
  

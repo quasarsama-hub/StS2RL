@@ -1,0 +1,193 @@
+diff --git a/src/Sts2Emulator.Tests/RestSiteProceedTests.cs b/src/Sts2Emulator.Tests/RestSiteProceedTests.cs
+new file mode 100644
+index 0000000..7df4ee0
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/RestSiteProceedTests.cs
+@@ -0,0 +1,93 @@
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Effects;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// A rest site's Proceed is disabled until an option has been taken: in every recorded
++/// rest site the button was off while an option was on, and on once it was taken. The
++/// emulator offered it from the start, a way out of a rest site with nothing done.
++/// </summary>
++public class RestSiteProceedTests
++{
++    private static RunEngine AtRest(params int[] relics)
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        foreach (int relic in relics)
++        {
++            RunNonCombatEffects.ApplyRelicPickup(engine.State, relic);
++        }
++
++        engine.State.Phase = RunPhase.Rest;
++        engine.State.RestOptionsTaken = 0;
++        return engine;
++    }
++
++    private static int[] Mask(RunEngine engine)
++    {
++        var mask = new int[RunConstants.MaxActions];
++        engine.WriteActionMask(mask);
++        return mask;
++    }
++
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    [Fact]
++    public void ProceedIsOffWhileNoOptionHasBeenTaken()
++    {
++        var mask = Mask(AtRest());
++
++        Assert.Equal(1, mask[RunConstants.RestHealAction]);
++        Assert.Equal(0, mask[RunConstants.RewardSkipAction]);
++    }
++
++    [Fact]
++    public void ProceedComesOnOnceAnOptionIsTaken()
++    {
++        var engine = AtRest();
++        Step(engine, RunConstants.RestHealAction);
++
++        Assert.Equal(RunPhase.Rest, engine.State.Phase);
++        Assert.Equal(1, Mask(engine)[RunConstants.RewardSkipAction]);
++    }
++
++    /// <summary>Miniature Tent keeps the others up after the first, and Proceed with them.</summary>
++    [Fact]
++    public void WithMiniatureTentTheSecondOptionCanBeDeclined()
++    {
++        var engine = AtRest(RelicEffects.MiniatureTent);
++        Step(engine, RunConstants.RestHealAction);
++
++        var mask = Mask(engine);
++        Assert.Equal(1, mask[RunConstants.RestUpgradeAction]);
++        Assert.Equal(1, mask[RunConstants.RewardSkipAction]);
++    }
++
++    /// <summary>
++    /// Dream Catcher's card reward leaves a rest from its result page for the map; the
++    /// result page used to stay pending, and the next rest site's first move did nothing
++    /// but leave.
++    /// </summary>
++    [Fact]
++    public void ARestSiteAfterDreamCatchersRewardStartsFresh()
++    {
++        var engine = AtRest(RunNonCombatEffects.NamedRelic("DreamCatcher"));
++        Step(engine, RunConstants.RestHealAction);
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Step(engine, RunConstants.RewardSkipAction);
++        Assert.Equal(RunPhase.Map, engine.State.Phase);
++
++        engine.State.MapNodeTypes[0] = RunConstants.NodeRest;
++        engine.State.MapOptionCoords[0] = engine.State.CurrentMapCoord with { Row = engine.State.CurrentMapCoord.Row + 1 };
++        Step(engine, 0);
++        Assert.Equal(RunPhase.Rest, engine.State.Phase);
++        int hp = engine.State.PlayerHp = 1;
++        Step(engine, RunConstants.RestHealAction);
++
++        Assert.True(engine.State.PlayerHp > hp);
++    }
++}
+diff --git a/src/Sts2Emulator.Tests/RunEngineTests.cs b/src/Sts2Emulator.Tests/RunEngineTests.cs
+index e14a555..9b262af 100644
+--- a/src/Sts2Emulator.Tests/RunEngineTests.cs
++++ b/src/Sts2Emulator.Tests/RunEngineTests.cs
+@@ -682,17 +682,13 @@ public class RunEngineTests
+         engine.State.Phase = RunPhase.Rest;
+         engine.State.Deck = [new CardInstance(10001, false)];
+         engine.WriteActionMask(mask);
+-        AssertMask(mask, RunConstants.RestHealAction, RunConstants.RewardSkipAction);
++        // No Proceed until an option is taken (RestSiteProceedTests).
++        AssertMask(mask, RunConstants.RestHealAction);
+ 
+         Array.Clear(mask);
+         engine.State.Deck = [new CardInstance(10001, false), new CardInstance(472, false)];
+         engine.WriteActionMask(mask);
+-        AssertMask(
+-            mask,
+-            RunConstants.RestHealAction,
+-            RunConstants.RestUpgradeAction,
+-            RunConstants.RewardSkipAction
+-        );
++        AssertMask(mask, RunConstants.RestHealAction, RunConstants.RestUpgradeAction);
+ 
+         Array.Clear(mask);
+         engine.State.Phase = RunPhase.RelicReward;
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 4cdfa2d..d1d8185 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -677,7 +677,19 @@ public sealed class RunEngine
+                     SetMask(mask, RunConstants.RestKindleAction);
+                 }
+ 
+-                SetMask(mask, RunConstants.RewardSkipAction);
++                // Proceed stays disabled until an option has been taken, or while there is
++                // none to take: in every recorded rest site the button was off while an
++                // option was on. Offering it from the start was a way out of a rest site
++                // with nothing done that the game does not have.
++                if (
++                    State.RestResultPending
++                    || State.RestOptionsTaken != 0
++                    || !RestOptionOffered(mask)
++                )
++                {
++                    SetMask(mask, RunConstants.RewardSkipAction);
++                }
++
+                 break;
+ 
+             case RunPhase.FakeMerchant:
+@@ -1242,7 +1254,10 @@ public sealed class RunEngine
+                         cameFromUnknown: false
+                     );
+                     State.RestOptionsTaken = 0;
+-                    State.RestOptionsTaken = 0;
++                    // A rest left from its result page by another screen (Dream Catcher's
++                    // card reward goes to the map from its own) kept this set, and the next
++                    // rest site's first move then did nothing but leave.
++                    State.RestResultPending = false;
+                     State.Phase = RunPhase.Rest;
+                     break;
+                 case RunConstants.NodeShop:
+@@ -2351,6 +2366,31 @@ public sealed class RunEngine
+     /// </summary>
+     private bool RestOptionSpent(int action) => (State.RestOptionsTaken & (1 << action)) != 0;
+ 
++    private static readonly int[] RestOptionActions =
++    [
++        RunConstants.RestHealAction,
++        RunConstants.RestUpgradeAction,
++        RunConstants.RestCloneAction,
++        RunConstants.RestLiftAction,
++        RunConstants.RestDigAction,
++        RunConstants.RestHatchAction,
++        RunConstants.RestCookAction,
++        RunConstants.RestKindleAction,
++    ];
++
++    private static bool RestOptionOffered(Span<int> mask)
++    {
++        foreach (int action in RestOptionActions)
++        {
++            if ((uint)action < (uint)mask.Length && mask[action] != 0)
++            {
++                return true;
++            }
++        }
++
++        return false;
++    }
++
+     private int GiryaLiftsLeft()
+     {
+         int index = State.Relics.FindIndex(relic => relic.DefId == Effects.RelicEffects.Girya);

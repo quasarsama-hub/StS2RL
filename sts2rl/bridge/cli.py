@@ -739,7 +739,8 @@ class CliSession:
         """The shadow's legal moves that have an engine command on this screen (None: all).
 
         The simulator offers a few moves the game does not: walking away from an event
-        without choosing, rerolling or sacrificing a card reward. Choosing one would be a
+        without choosing, rerolling or sacrificing a card reward, leaving a rest site with
+        an option still on. Choosing one would be a
         false desync, so they are left out -- the agent then picks from what the player
         could really do.
         """
@@ -755,8 +756,10 @@ class CliSession:
             n = len(state.get("cards") or [])
             return [a for a in legal if a < min(n, 3) or a == REWARD_SKIP or (a == REWARD_FOURTH_CARD and n >= 4)]
         if decision == "rest_site":
+            # Leaving is the game's Proceed, which stays off while an option is on (sts2-cli
+            # would force its way to the map regardless).
             offered = {str(o.get("option_id", "")).upper() for o in state.get("options") or [] if o.get("is_enabled", True)}
-            return [a for a in legal if a == REWARD_SKIP or offered & set(REST_IDS.get(a, ()))]
+            return [a for a in legal if (a == REWARD_SKIP and not offered) or offered & set(REST_IDS.get(a, ()))]
         return None
 
     def _combat(self, action: int, target: int, state: dict) -> Move:

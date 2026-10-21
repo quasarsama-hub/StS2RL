@@ -50,7 +50,7 @@ and play worse than the heuristic it was supposed to improve on.)
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
 captures, exact RNG, exact map generation). It's pinned as a git submodule; this repo
-carries eight patches for it (`patches/sts2/`):
+carries ten patches for it (`patches/sts2/`):
 
 | patch | what it does |
 |---|---|
@@ -61,10 +61,12 @@ carries eight patches for it (`patches/sts2/`):
 | `0005-golden-path-unknown-rooms` | Golden Compass's single-column map typed its "?" rooms as *no node*, which the map screen can't move onto, so every Golden Compass run got stuck on its second floor. |
 | `0006-treasure-chest-relic` | Treasure chests paid their gold but **never their relic**: the game's `treasure_room_relics` RNG stream and shared relic bag were built and cloned but never drawn from, so every simulated run was a relic or two short by mid-Act 1. Chests now offer their relic on the reward screen (rarity rolled on that stream, drawn from the shared bag). Checked against every chest in the recorded real-game runs: **11 of 11 offer exactly the relic the game offered** (Vajra, Red Mask, Oddly Smooth Stone, Stone Cracker, Blood Vial, …). Also, Silver Crucible ("the first Treasure Chest you open is empty") emptied every chest; now only the first. |
 | `0007-fourth-reward-observation-offset` | Lasting Candy's fourth card-reward option was written into the deck block of the observation instead of its own (an offset used without the run block's base), so nothing could read it. |
-| `0008-reward-skip-abandons-the-screen` | Skipping a rewards screen gave up only its queued potions. An unclaimed card reward, the offers queued behind it, Kaleidoscope's, Prayer Wheel's still owed, bonus relics and Lasting Candy's option all stayed in the state and came back on a later screen that never had them (and Prayer Wheel's added up fight after fight). Now a skip abandons everything on the screen, as in the game. Neither agent here ever skips a screen with something left on it, so the results below do not move; it matters for exploration in training. |
+| `0008-reward-skip-abandons-the-screen` | Skipping a rewards screen gave up only its queued potions. An unclaimed card reward, the offers queued behind it, Kaleidoscope's, the relic and bonus relics, Prayer Wheel's reward still owed and Lasting Candy's option all stayed in the state and came back on a later screen that never had them (an unclaimed Prayer Wheel reward added up fight after fight). Now a skip abandons what is on the screen, as in the game, and only that: it is also the plain Proceed off an emptied screen, and an Orrery bought at the shop still owes its five. Neow's Bones' screen can no longer be skipped (the game offers it WithSkippingDisallowed). |
+| `0009-rest-site-proceed-after-an-option` | A rest site's Proceed was offered from the start, so a run could leave with nothing done; the game keeps the button off until an option is taken (all 27 recorded rest sites). The trained agent took that way out in 3 of 128 held-out runs. Also, a rest left by Dream Catcher's card reward kept its result page pending, and the next rest site's first move did nothing but leave. |
+| `0010-direct-card-rewards-offer-every-screen` | The Trial (a Nondescript defendant found guilty: two card rewards) and Colorful Philosophers (three) offered only the first; answering it went straight to the map, and the rest stayed queued for whatever rewards screen came next. Now each is offered in turn, as sts2-cli shows them. |
 
-The simulator's own test suite passes with all eight patches applied (4,809 tests, including
-regression tests patches 5–8 add).
+The simulator's own test suite passes with all ten patches applied (4,818 tests, including
+regression tests patches 5–10 add).
 
 ## Results so far
 
@@ -73,7 +75,7 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with all eight simulator patches, and with the agent unable to walk away from an event (a
+with all ten simulator patches, and with the agent unable to walk away from an event (a
 move the simulator allows and the game does not; see the sts2-cli section)
 (`results/dev-run/final-eval-patch0006/`):
 
@@ -136,7 +138,7 @@ bash setup.sh                       # submodule + patches + native build + .venv
 source .venv/bin/activate
 
 python -m sts2rl.evaluate --agent heuristic --runs 16     # smoke test
-python -m pytest -q                                        # 74 tests, ~45 s
+python -m pytest -q                                        # 77 tests, ~45 s
 python -m sts2rl.watch --model models/best.pt --seed ANYSEED   # the trained agent
 ```
 
@@ -308,14 +310,18 @@ What the bench has to work around, and how:
   which sts2-cli has no command for) are never chosen: the agent evaluates them but takes
   its best real move, and each run counts how often that happened. Walking away from an
   event is gone from the agent altogether — the game has no such button, except where an
-  event really offers one (Welcome to Wongos' Leave).
+  event really offers one (Welcome to Wongos' Leave) — and so is leaving a rest site before
+  taking an option (simulator patch 0009). The stand-in engine refuses the latter, though
+  sts2-cli itself would force its way to the map.
 * **What counts as what.** A move the engine refuses although the simulator allowed it is a
   desync, as is any disagreement in the comparison. sts2-cli itself failing (an exception,
   whether it arrives with a stack trace or as the plain message sts2-cli writes when it
   catches the game's own — "Buy relic failed: …" —, a timeout, an unknown screen) is an
   engine error, and a run that crashes its worker
   process is re-run alone and, if it crashes again, recorded as one; the others carry on.
-* **Not modelled by the simulator, so they end a run as a desync:** Act 3's ancients.
+* **Not modelled by the simulator, so they end a run as a desync:** Act 3's ancients, and
+  the card Welcome to Wongos' Leave downgrades (the game's option text says it does; which
+  card, off which random stream, is not known without the game's code).
   **Checked only in part:** a selection screen of more than 10 cards, whose cards past the
   10th the simulator's observation does not show (they are matched by position alone).
 

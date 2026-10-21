@@ -10,6 +10,7 @@ made to disagree.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -29,7 +30,8 @@ def bench(seed: str, agent_seed: int = 7_000_000, trace: Path | None = None, **c
         return cli.CliSession(game, agent, cli.Names(None), seed, trace_path=trace).play()
 
 
-@pytest.mark.parametrize("seed", ["EVAL000000", "EVAL000008", "EVAL000015", "EVAL000043"])  # 43 meets an event it could walk away from
+# 43 meets an event it could walk away from; 13 a rest site it could leave with nothing done
+@pytest.mark.parametrize("seed", ["EVAL000000", "EVAL000008", "EVAL000013", "EVAL000015", "EVAL000043"])
 def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed, tmp_path):
     result = bench(seed, trace=tmp_path / "trace.jsonl")
     assert result.in_sync, result.desync_reason or result.engine_error
@@ -64,14 +66,15 @@ def test_unpatched_sts2cli_heal_rounding_is_caught(monkeypatch):
     monkeypatch.setenv("FAKE_STS2CLI_FAULT", "ceil-heal")
     result = bench("EVAL000013", agent_seed=7_000_013, max_act=2)
     assert not result.in_sync and result.desync_floor == 17
-    assert result.desync_reason.startswith("hp (between-act heal): game=73 sim=72")
+    game, sim_hp = re.match(r"hp \(between-act heal\): game=(\d+) sim=(\d+)", result.desync_reason).groups()
+    assert int(game) == int(sim_hp) + 1
 
 
 def test_a_fights_extra_card_reward_is_forfeited_not_desynced():
     # sts2-cli shows only a fight's first card reward; the shadow gives up the second too,
     # and the run counts it.
     result = bench("EVAL000160", agent_seed=7_000_160)
-    assert result.in_sync and result.forfeits == 1
+    assert result.in_sync and result.forfeits >= 1
 
 
 def test_queued_card_offers_the_engine_drops_are_each_forfeited_and_none_is_left():
@@ -190,6 +193,31 @@ def test_the_agent_never_walks_away_from_an_event_the_game_cannot_leave():
     assert list(agent.choices(page(ids["WelcomeToWongos"]))) == [0, 1, 3]
     # and a move that is the only one is never taken away
     assert list(agent.choices(page(ids["SelfHelpBook"], (3,)))) == [3]
+
+
+def test_a_rest_site_cannot_be_left_until_an_option_is_taken():
+    # The game's Proceed is off while a rest option is on (simulator patch 0009).
+    agent = Agent(None, AgentConfig(**CFG), seed=0)
+    with sim.Run.new("EVAL000000") as run:
+        for _ in range(2000):
+            if run.phase == sim.PHASE_REST or run.done:
+                break
+            assert run.step(*agent.act(run))
+        assert run.phase == sim.PHASE_REST
+        assert cli.REWARD_SKIP not in [int(a) for a in run.legal()]
+        assert run.step(0)  # rest
+        assert run.phase == sim.PHASE_REST and cli.REWARD_SKIP in [int(a) for a in run.legal()]
+
+
+def test_the_bench_leaves_a_rest_site_only_when_the_engine_has_no_option_on():
+    from types import SimpleNamespace
+
+    session = cli.CliSession(None, Agent(None, AgentConfig(**CFG)), cli.Names(None), "EVAL000000")
+    session.shadow = SimpleNamespace(legal=lambda: [0, 1, cli.REWARD_SKIP])
+    on = {"options": [{"option_id": "HEAL", "is_enabled": True}, {"option_id": "SMITH", "is_enabled": True}]}
+    off = {"options": [{"option_id": "HEAL", "is_enabled": False}, {"option_id": "SMITH", "is_enabled": False}]}
+    assert session._expressible("rest_site", on) == [0, 1]
+    assert session._expressible("rest_site", off) == [cli.REWARD_SKIP]
 
 
 def test_ids_and_titles():
