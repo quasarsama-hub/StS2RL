@@ -5,51 +5,51 @@
  "summary_a": {
   "runs": 128,
   "errors": 0,
-  "score": 0.14560355392156862,
+  "score": 0.1404718137254902,
   "win_rate": 0.0,
   "win_ci95": [
    0.0,
    0.02913799589810803
   ],
-  "mean_floor": 14.8515625,
-  "seconds_per_run": 2.924691177351546,
-  "act1_clear": 0.3046875,
+  "mean_floor": 14.328125,
+  "seconds_per_run": 2.964361717421852,
+  "act1_clear": 0.2578125,
   "act2_clear": 0.0,
   "act3_clear": 0.0,
   "deaths": {
-   "byrdonis": 10,
-   "phrog-parasite": 10,
-   "phantasmal-gardeners": 10,
-   "slumbering-beetle": 8,
-   "vantom": 7,
+   "phantasmal-gardeners": 13,
+   "phrog-parasite": 11,
+   "byrdonis": 9,
    "spiny-toad": 7,
-   "bygone-effigy": 6,
-   "skulking-colony": 6
+   "vantom": 6,
+   "skulking-colony": 6,
+   "soul-fysh": 6,
+   "slumbering-beetle": 5
   }
  },
  "summary_b": {
   "runs": 128,
   "errors": 0,
-  "score": 0.19064031862745098,
+  "score": 0.19041053921568626,
   "win_rate": 0.0,
   "win_ci95": [
    0.0,
    0.02913799589810803
   ],
-  "mean_floor": 19.4453125,
-  "seconds_per_run": 3.52114466380468,
-  "act1_clear": 0.5546875,
-  "act2_clear": 0.015625,
+  "mean_floor": 19.421875,
+  "seconds_per_run": 3.5715608062031166,
+  "act1_clear": 0.5859375,
+  "act2_clear": 0.0078125,
   "act3_clear": 0.0,
   "deaths": {
-   "slumbering-beetle": 11,
-   "vantom": 8,
-   "lagavulin-matriarch": 8,
-   "bowlbugs": 7,
-   "spiny-toad": 7,
-   "soul-fysh": 6,
-   "entomancer": 6,
-   "obscura": 6
+   "slumbering-beetle": 14,
+   "soul-fysh": 9,
+   "vantom": 9,
+   "lagavulin-matriarch": 7,
+   "obscura": 7,
+   "kin": 7,
+   "hunter-killer": 7,
+   "bowlbugs": 6
   }
  },
  "comparison": {
@@ -57,25 +57,25 @@
   "missing": [],
   "missing_a": [],
   "missing_b": [],
-  "score_a": 0.14560355392156862,
-  "score_b": 0.19064031862745098,
-  "score_diff": 0.04503676470588235,
+  "score_a": 0.1404718137254902,
+  "score_b": 0.1904105392156863,
+  "score_diff": 0.049938725490196074,
   "score_diff_ci95": [
-   0.0313265931372549,
-   0.059206495098039214
+   0.03691789215686274,
+   0.06311274509803921
   ],
   "score_p_b_better": 4.999750012499375e-05,
-  "floor_diff": 4.59375,
+  "floor_diff": 5.09375,
   "floor_diff_ci95": [
-   3.1953125,
-   6.0390625
+   3.765625,
+   6.4375
   ],
-  "act1_a": 39,
-  "act1_b": 71,
+  "act1_a": 33,
+  "act1_b": 75,
   "act1_mcnemar": {
-   "discordant": 66,
-   "p_two_sided": 0.0001014771231679886,
-   "p_b_better": 5.0738561583996145e-05
+   "discordant": 74,
+   "p_two_sided": 9.674891137601899e-07,
+   "p_b_better": 4.837445568561805e-07
   },
   "wins_a": 0,
   "wins_b": 0,
@@ -86,5 +86,5 @@
   }
  },
  "promote": true,
- "reason": "score +0.0450 (p=0.0000), Act 1 clears 39->71"
+ "reason": "score +0.0499 (p=0.0000), Act 1 clears 33->75"
 }

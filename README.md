@@ -79,26 +79,27 @@ move the simulator allows and the game does not; see the sts2-cli section)
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
-| heuristic, no training | 48 | 0.146 | 30% [23–39%] | 0 | 14.9 |
-| **trained** (`models/best.pt`) | 48 | 0.191 | **55% [47–64%]** | 2 runs | 19.4 |
-| **trained**, deeper search | 128 | 0.205 | **59% [50–67%]** | 3 runs | 21.0 |
+| heuristic, no training | 48 | 0.140 | 26% [19–34%] | 0 | 14.3 |
+| **trained** (`models/best.pt`) | 48 | 0.190 | **59% [50–67%]** | 1 run | 19.4 |
+| **trained**, deeper search | 128 | 0.202 | 56% [48–65%] | 2 runs | 20.6 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 71 seeds to the heuristic's 39 (66
-seeds differ, exact McNemar p = 0.0001), and its run score is higher by +0.045 [+0.031,
-+0.059]. Training **nearly doubled the Act 1 clear rate** after ~1,800 self-play runs
+Paired, at 48 sims: the trained agent clears Act 1 on 75 seeds to the heuristic's 33 (74
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.050 [+0.037,
++0.063]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
 (about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
-+0.015 [+0.004, +0.025], p = 0.004; 1.5 floors) but does not clear Act 1 measurably more
-often (75 vs 71 seeds, 32 differ, p = 0.60). Deaths moved from Act 1 hallway fights
-(Byrdonis, Phrog Parasite, Phantasmal Gardeners) to Slumbering Beetle, the Act 1 bosses
-(Vantom, Lagavulin Matriarch) and the early Act 2.
++0.012 [+0.002, +0.022], p = 0.01; 1.2 floors) but does not clear Act 1 measurably more
+often (72 vs 75 seeds, 37 differ, p = 0.74). Deaths moved from Act 1 hallway fights
+(Phantasmal Gardeners, Phrog Parasite, Byrdonis) to Slumbering Beetle, the Act 1 bosses
+(Vantom, Lagavulin Matriarch, Kin) and the early Act 2.
 
-The checkpoint was trained *before* patches 0006–0007 and the event fix. The trained rows
-read 44% / 55% with none of them (`results/dev-run/final-eval/`), 52% / 66% with the chest
-relics but the walk-away still allowed (commit 8f987fd), and 59% / 55% once the walk-away
-was gone; the Silver Crucible, fourth-card and event-option fixes then moved them to 55% /
-59%, the two search depths trading places on the same seeds. The heuristic went 14% → 27%
-→ 26% → 30%. On 128 seeds a single rate is good to about ±8 points (95%), so read the
-history as "chest relics help a lot, the rest is noise" rather than to the point.
+The checkpoint was trained *before* patches 0006–0008 and the event fix. The trained rows
+read 44% / 55% with none of them (`results/dev-run/final-eval/`) and 52% / 66% with the
+chest relics but the walk-away still allowed (commit 8f987fd); the heuristic went 14% →
+27% → 26%. (A measurement in between, commit 068659c, read 55% / 59% and 30%: a bug in
+that version let the agent walk away from the events that build their options at run
+time. Fixed, every one of the 256 trained runs above plays exactly as it did before the
+bug.) On 128 seeds a single rate is good to about ±8 points (95%), so read the history as
+"chest relics help a lot, the rest is noise" rather than to the point.
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
 points of noise per row):
