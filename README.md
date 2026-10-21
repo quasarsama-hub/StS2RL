@@ -83,31 +83,31 @@ move the simulator allows and the game does not; see the sts2-cli section)
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
-| heuristic, no training | 48 | 0.141 | 25% [18–33%] | 0 | 14.4 |
-| **trained** (`models/best.pt`) | 48 | 0.195 | **59% [50–67%]** | 3 runs | 19.9 |
-| **trained**, deeper search | 128 | 0.204 | **67% [59–75%]** | 1 run | 20.9 |
+| heuristic, no training | 48 | 0.143 | 25% [18–33%] | 0 | 14.6 |
+| **trained** (`models/best.pt`) | 48 | 0.195 | **56% [48–65%]** | 1 run | 19.8 |
+| **trained**, deeper search | 128 | 0.208 | **63% [54–70%]** | 3 runs | 21.2 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 75 seeds to the heuristic's 32 (67
-seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.054 [+0.039,
-+0.069]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
+Paired, at 48 sims: the trained agent clears Act 1 on 72 seeds to the heuristic's 32 (72
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.052 [+0.036,
++0.067]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
 (about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
-+0.010 [+0.000, +0.019], p = 0.03; one floor) and clears Act 1 on 86 seeds to 75 — a hint,
-not yet significant (31 differ, p = 0.07). Deaths moved from Act 1 hallway fights
-(Phantasmal Gardeners, Phrog Parasite, Byrdonis) to Slumbering Beetle, Spiny Toad, the Act
-1 bosses (Lagavulin Matriarch, Vantom) and the early Act 2.
++0.014 [+0.004, +0.023], p = 0.003; 1.4 floors) but does not clear Act 1 measurably more
+often (80 vs 72 seeds, 30 differ, p = 0.20). Deaths moved from Act 1 hallway fights
+(Phantasmal Gardeners, Terror Eel, Bygone Effigy, Phrog Parasite) to Slumbering Beetle,
+the Act 1 bosses (Vantom, Lagavulin Matriarch) and the early Act 2.
 
-The checkpoint was trained *before* patches 0006–0010 and the event fix. The trained rows
+The checkpoint was trained *before* patches 0006–0012 and the event fix. The trained rows
 read 44% / 55% with none of them (`results/dev-run/final-eval/`), 52% / 66% with the chest
-relics but the walk-away still allowed (commit 8f987fd), and 59% / 56% before rest sites
-lost their Proceed-from-the-start (commit d2235b2); the heuristic went 14% → 27% → 26% →
-25%. That last fix changed the move only at a few rest sites, yet most runs play out
-differently since: every candidate move the agent weighs draws from its random stream, so
-one candidate fewer at a rest site re-rolls every decision after it. The 128-sim row going
-from 56% to 67% is that re-roll as much as anything. On 128 seeds a single rate is good to
-about ±8 points (95%), so read the history as "chest relics help a lot, the rest is noise"
-rather than to the point. (A measurement in between, commit 068659c, read 55% / 59% and 30%
-because of a bug that let the agent walk away from events that build their options at run
-time.)
+relics but the walk-away still allowed (commit 8f987fd), 59% / 56% with rest sites still
+offering Proceed from the start (commit d2235b2) and 59% / 67% with every potion still
+drinkable (commit 0cade94); the heuristic went 14% → 27% → 26% → 25% → 25%. The later
+fixes change the move only at a few rest sites or potions, yet most runs play out
+differently after each: every candidate move the agent weighs draws from its random
+stream, so one candidate fewer re-rolls every decision after it. On 128 seeds a single
+rate is good to about ±8 points (95%), so read the history as "chest relics help a lot,
+the rest is noise" rather than to the point. (A measurement in between, commit 068659c,
+read 55% / 59% and 30% because of a bug that let the agent walk away from events that
+build their options at run time.)
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
 points of noise per row):

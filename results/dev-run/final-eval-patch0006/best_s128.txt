@@ -1,3 +1,3 @@
-score 0.204  win 0.0% [0.0%,2.9%]  act1:67%  act2:1%  act3:0%  floor 20.9  (128 runs, 13.5s/run)
-most common deaths: {'slumbering-beetle': 14, 'spiny-toad': 13, 'obscura': 10, 'vantom': 9, 'hunter-killer': 8, 'chompers': 7, 'lagavulin-matriarch': 7, 'kin': 7}
-wall time 438s
+score 0.208  win 0.0% [0.0%,2.9%]  act1:62%  act2:2%  act3:0%  floor 21.2  (128 runs, 26.9s/run)
+most common deaths: {'slumbering-beetle': 13, 'vantom': 12, 'lagavulin-matriarch': 10, 'spiny-toad': 9, 'bowlbugs': 6, 'obscura': 6, 'hunter-killer': 6, 'kin': 6}
+wall time 878s

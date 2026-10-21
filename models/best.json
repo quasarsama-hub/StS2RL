@@ -73,11 +73,11 @@
   }
  },
  "results_patch0006": {
-  "note": "simulator with patches 0001-0010 (chests give their relic, Silver Crucible empties only the first chest, the Lasting Candy fourth card is observed, a skipped rewards screen gives up what is on it, a rest site cannot be left before an option is taken, the Trial and Colorful Philosophers offer every card reward); the agent never walks away from an event (the game has no such button; Welcome to Wongos' Leave is its own option). The checkpoint was trained before all of these.",
+  "note": "simulator with patches 0001-0012 (chests give their relic, Silver Crucible empties only the first chest, the Lasting Candy fourth card is observed, a skipped rewards screen gives up what is on it, a rest site cannot be left before an option is taken, the Trial and Colorful Philosophers offer every card reward, screens opened from a rewards screen return to it, only the eight modelled potions can be drunk); the agent never walks away from an event (the game has no such button; Welcome to Wongos' Leave is its own option). The checkpoint was trained before all of these.",
   "seeds": "EVAL001000-EVAL001127 (test split)",
   "heuristic_s48": {
    "runs": 128,
-   "score": 0.1411,
+   "score": 0.1428,
    "act1_clear": 0.25,
    "act1_clear_ci95": [
     0.183,
@@ -85,82 +85,82 @@
    ],
    "act2_clear": 0.0,
    "win_rate": 0.0,
-   "mean_floor": 14.39,
+   "mean_floor": 14.57,
    "deaths": {
-    "phantasmal-gardeners": 14,
-    "phrog-parasite": 12,
-    "byrdonis": 9,
-    "ovicopter": 7,
-    "lagavulin-matriarch": 7,
+    "phantasmal-gardeners": 13,
+    "terror-eel": 9,
+    "bygone-effigy": 8,
+    "phrog-parasite": 8,
     "soul-fysh": 6,
     "vantom": 6,
-    "terror-eel": 6
+    "ceremonial-beast": 6,
+    "kin": 6
    }
   },
   "best_s48": {
    "runs": 128,
-   "score": 0.1949,
-   "act1_clear": 0.5859375,
+   "score": 0.1945,
+   "act1_clear": 0.5625,
    "act1_clear_ci95": [
-    0.499,
-    0.668
+    0.476,
+    0.645
    ],
-   "act2_clear": 0.0234375,
+   "act2_clear": 0.0078125,
    "win_rate": 0.0,
-   "mean_floor": 19.88,
+   "mean_floor": 19.84,
    "deaths": {
-    "slumbering-beetle": 14,
-    "spiny-toad": 11,
-    "ovicopter": 9,
-    "lagavulin-matriarch": 9,
-    "vantom": 8,
-    "mytes": 7,
-    "hunter-killer": 7,
-    "kin": 6
+    "slumbering-beetle": 13,
+    "vantom": 11,
+    "lagavulin-matriarch": 11,
+    "spiny-toad": 9,
+    "hunter-killer": 8,
+    "kin": 7,
+    "ovicopter": 6,
+    "louse-progenitor": 6
    }
   },
   "best_s128": {
    "runs": 128,
-   "score": 0.2044,
-   "act1_clear": 0.671875,
+   "score": 0.2082,
+   "act1_clear": 0.625,
    "act1_clear_ci95": [
-    0.587,
-    0.747
+    0.539,
+    0.704
    ],
-   "act2_clear": 0.0078125,
+   "act2_clear": 0.0234375,
    "win_rate": 0.0,
-   "mean_floor": 20.85,
+   "mean_floor": 21.23,
    "deaths": {
-    "slumbering-beetle": 14,
-    "spiny-toad": 13,
-    "obscura": 10,
-    "vantom": 9,
-    "hunter-killer": 8,
-    "chompers": 7,
-    "lagavulin-matriarch": 7,
-    "kin": 7
+    "slumbering-beetle": 13,
+    "vantom": 12,
+    "lagavulin-matriarch": 10,
+    "spiny-toad": 9,
+    "bowlbugs": 6,
+    "obscura": 6,
+    "hunter-killer": 6,
+    "kin": 6
    }
   },
   "paired_heuristic_vs_best_s48": {
    "act1_heuristic": 32,
-   "act1_best": 75,
-   "act1_mcnemar_p": 1.0273195443541005e-07,
-   "score_diff": 0.0538,
+   "act1_best": 72,
+   "act1_mcnemar_p": 2.397319809534421e-06,
+   "score_diff": 0.0517,
    "score_diff_ci95": [
-    0.0386,
-    0.0693
+    0.0365,
+    0.0669
    ]
   },
   "paired_best_s48_vs_s128": {
-   "act1_s48": 75,
-   "act1_s128": 86,
-   "act1_mcnemar_p": 0.071,
-   "score_diff": 0.0096,
+   "act1_s48": 72,
+   "act1_s128": 80,
+   "act1_mcnemar_p": 0.2,
+   "score_diff": 0.0136,
    "score_diff_ci95": [
-    0.0001,
-    0.0193
+    0.0044,
+    0.0233
    ],
-   "score_p_s128_better": 0.027
+   "score_p_s128_better": 0.003
   }
  }
 }
