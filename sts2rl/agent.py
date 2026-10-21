@@ -71,17 +71,21 @@ def choices(run: sim.Run) -> np.ndarray:
 
     The simulator lets a run walk away from any event without choosing (its event "skip",
     action 3). The game has no such button: in recorded real runs that action only stands
-    for Proceed on a result page. So it is left out wherever it cannot be a real option --
-    on result pages (where any move proceeds) and on events whose first page has at most
-    three options. Events that build their option list at run time keep it: at Welcome to
-    Wongos, action 3 is the game's own Leave.
+    for Proceed on a result page, where any move proceeds. So it is left out wherever
+    there is anything else to do, except where action 3 is one of the event's own options:
+    Welcome to Wongos' Leave, the only event with a fourth option.
     """
     legal = run.legal()
-    if run.phase == sim.PHASE_EVENT and len(legal) > 1:
-        options = gd.event_options().get(run.event_id)
-        if run.event_id == EVENT_RESULT_PENDING or (options is not None and options[1] <= sim.EVENT_SKIP):
-            legal = legal[legal != sim.EVENT_SKIP]
+    if run.phase == sim.PHASE_EVENT and len(legal) > 1 and not _skip_is_an_option(run.event_id):
+        legal = legal[legal != sim.EVENT_SKIP]
     return legal
+
+
+def _skip_is_an_option(event_id: int) -> bool:
+    if event_id == gd.event_ids()["WelcomeToWongos"]:
+        return True
+    options = gd.event_options().get(event_id)
+    return options is not None and options[1] > sim.EVENT_SKIP
 
 
 def heuristic_value(run: sim.Run, max_act: int = 3, maps: F.MapCache | None = None) -> float:

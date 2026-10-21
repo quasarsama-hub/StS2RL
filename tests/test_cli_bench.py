@@ -9,6 +9,7 @@ made to disagree.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -22,17 +23,23 @@ FAKE = [sys.executable, str(Path(__file__).with_name("fake_sts2cli.py"))]
 CFG = dict(combat_sims=8, samples=1, max_act=1, record=False)
 
 
-def bench(seed: str, agent_seed: int = 7_000_000, **cfg):
+def bench(seed: str, agent_seed: int = 7_000_000, trace: Path | None = None, **cfg):
     agent = Agent(None, AgentConfig(**{**CFG, **cfg}), seed=agent_seed)
     with cli.CliGame(FAKE, timeout=60) as game:
-        return cli.CliSession(game, agent, cli.Names(None), seed).play()
+        return cli.CliSession(game, agent, cli.Names(None), seed, trace_path=trace).play()
 
 
-@pytest.mark.parametrize("seed", ["EVAL000000", "EVAL000008", "EVAL000015"])
-def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed):
-    result = bench(seed)
+@pytest.mark.parametrize("seed", ["EVAL000000", "EVAL000008", "EVAL000015", "EVAL000043"])  # 43 meets an event it could walk away from
+def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed, tmp_path):
+    result = bench(seed, trace=tmp_path / "trace.jsonl")
     assert result.in_sync, result.desync_reason or result.engine_error
     assert result.finished
+    assert result.restricted == 0  # the agent never wanted a move the engine does not have
+    # The stand-in lists an event's own options only (no seed here meets Welcome to Wongos,
+    # the one event with four).
+    rows = [json.loads(line) for line in (tmp_path / "trace.jsonl").read_text().splitlines()]
+    events = [r["state"]["options"] for r in rows if r["kind"] == "state" and r["decision"] == "event_choice"]
+    assert events and max(len(options) for options in events) <= 3
     twin = Agent(None, AgentConfig(**CFG), seed=7_000_000).play(seed)
     assert (result.final_floor, result.won) == (twin.final_floor, twin.won)
 
@@ -65,6 +72,57 @@ def test_a_fights_extra_card_reward_is_forfeited_not_desynced():
     # and the run counts it.
     result = bench("EVAL000160", agent_seed=7_000_160)
     assert result.in_sync and result.forfeits == 1
+
+
+def test_queued_card_offers_the_engine_drops_are_each_forfeited_and_none_is_left():
+    # The Hunt / Glass Eye queue offers behind a reward screen's single card item; sts2-cli
+    # shows only a fight's first card reward. The shadow opens and gives up each one.
+    class Screen:
+        def __init__(self, queued, flagged=0):
+            self.phase, self.queued, self.flagged, self.floor = sim.PHASE_RELIC_REWARD, queued, flagged, 5
+
+        def legal(self):
+            if self.phase == sim.PHASE_CARD_REWARD:
+                return [0, 1, 2, cli.REWARD_SKIP]
+            return [0, cli.REWARD_SKIP] if self.queued or self.flagged else [cli.REWARD_SKIP]
+
+        def state_list(self, list_id, capacity):
+            return (0, 0, 0, self.flagged)
+
+        def pending_selection(self):
+            return 0
+
+        def step(self, action):
+            if self.phase == sim.PHASE_CARD_REWARD:
+                assert action == cli.REWARD_SKIP
+                self.phase = sim.PHASE_RELIC_REWARD
+            elif action == cli.REWARD_SKIP:
+                self.phase = sim.PHASE_MAP
+            else:
+                assert not self.flagged
+                self.queued -= 1
+                self.phase = sim.PHASE_CARD_REWARD
+            return True
+
+    session = cli.CliSession(None, Agent(None, AgentConfig(**CFG)), cli.Names(None), "EVAL000000")
+    session.room = {"card_reward": True}
+    session.shadow = Screen(queued=2)
+    session.advance_shadow({"decision": "map_select"})
+    assert session.shadow.phase == sim.PHASE_MAP and session.shadow.queued == 0 and session.forfeits == 2
+    # A flagged item (the fight's own reward, or Kaleidoscope's, rolled when opened) is
+    # given up unopened.
+    session.forfeits, session.shadow = 0, Screen(queued=0, flagged=1)
+    session.advance_shadow({"decision": "map_select"})
+    assert session.shadow.phase == sim.PHASE_MAP and session.forfeits == 1
+
+
+def test_an_exception_sts2cli_catches_itself_is_an_engine_error_not_a_desync(monkeypatch):
+    # sts2-cli's purchase handlers catch the game's exception and answer without a stack
+    # trace; a rule refusal reads the same way, so the bench tells them apart by message.
+    monkeypatch.setenv("FAKE_STS2CLI_FAULT", "buy-fails")
+    result = bench("EVAL000000")
+    assert not result.in_sync and not result.desync_reason
+    assert "Buy card failed" in result.engine_error
 
 
 def test_the_first_divergence_is_reported_with_its_floor(monkeypatch):
@@ -102,6 +160,11 @@ def test_deck_selections_are_followed_through_every_kind_of_change():
     # an enchant changes only the picked card, even when identical cards follow it
     pommels = [(5, 0, 0, 0), (7, 0, 0, 0), (7, 0, 0, 0)]
     assert cli.follow_deck(pommels, [(5, 0, 0, 0), (7, 0, 4, 1), (7, 0, 0, 0)], 1) == {0: 0, 2: 2}
+    # ... and a change the columns do not show is read as in place, not as a removal
+    assert cli.follow_deck(pommels, pommels, 1) == {0: 0, 2: 2}
+    # the bench reads every column, enchantment included
+    with sim.Run.new("EVAL000000") as run:
+        assert {len(c) for c in cli.deck_columns(run)} == {4}
 
 
 def test_the_agent_never_walks_away_from_an_event_the_game_cannot_leave():
@@ -111,13 +174,22 @@ def test_the_agent_never_walks_away_from_an_event_the_game_cannot_leave():
 
     from sts2rl import agent
 
-    def page(event_id):
-        return SimpleNamespace(phase=sim.PHASE_EVENT, event_id=event_id, legal=lambda: np.array([0, 1, 3]))
+    def page(event_id, legal=(0, 1, 3)):
+        return SimpleNamespace(phase=sim.PHASE_EVENT, event_id=event_id, legal=lambda: np.array(legal))
 
+    ids = cli.gd.event_ids()
     unrest = next(i for i, (entry, _) in cli.gd.event_options().items() if entry == "UNREST_SITE")
+    three = next(i for i, (_, n) in cli.gd.event_options().items() if n == 3)
     assert list(agent.choices(page(unrest))) == [0, 1]  # two options; 3 is the simulator's walk-away
-    assert list(agent.choices(page(-1))) == [0, 1]  # a result page: every move proceeds
-    assert list(agent.choices(page(41))) == [0, 1, 3]  # Welcome to Wongos: 3 is the game's Leave
+    assert list(agent.choices(page(three, (0, 1, 2, 3)))) == [0, 1, 2]  # three options: 0-2
+    assert list(agent.choices(page(-1, (0, 3)))) == [0]  # a result page: every move proceeds
+    # Events that build their options at run time have at most three too ...
+    assert list(agent.choices(page(ids["SelfHelpBook"]))) == [0, 1]
+    assert list(agent.choices(page(ids["LuminousChoir"], (0, 3)))) == [0]
+    # ... except Welcome to Wongos, whose fourth is the game's own Leave
+    assert list(agent.choices(page(ids["WelcomeToWongos"]))) == [0, 1, 3]
+    # and a move that is the only one is never taken away
+    assert list(agent.choices(page(ids["SelfHelpBook"], (3,)))) == [3]
 
 
 def test_ids_and_titles():

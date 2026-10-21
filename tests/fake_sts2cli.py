@@ -11,7 +11,8 @@ the simulator's walk-away action has no button in the game.
 
 FAKE_STS2CLI_FAULT=hp:<floor> makes it report one HP less than the truth from that floor
 on, so a test can check the bench notices; FAKE_STS2CLI_FAULT=ceil-heal rounds the
-between-act heal up, as unpatched sts2-cli does.
+between-act heal up, as unpatched sts2-cli does; FAKE_STS2CLI_FAULT=buy-fails answers a
+purchase the way sts2-cli does when the game's own code throws.
 """
 
 from __future__ import annotations
@@ -32,6 +33,10 @@ from sts2rl.bridge import cli  # noqa: E402
 
 NAMES = cli.Names(None)
 FAULT = os.environ.get("FAKE_STS2CLI_FAULT", "")
+
+
+class Refusal(Exception):
+    """An error sts2-cli answers in its own words (no stack trace)."""
 
 
 def out(msg: dict) -> None:
@@ -196,9 +201,11 @@ class Engine:
             from sts2rl import gamedata as gd
 
             legal = {int(a) for a in run.legal()}
-            # The event's own option list: its fixed count when the simulator's table has
-            # one (the walk-away action is not an option), else whatever is offered.
             known = gd.event_options().get(run.event_id) if ph == sim.PHASE_EVENT else None
+            if ph == sim.PHASE_EVENT and run.event_id != gd.event_ids()["WelcomeToWongos"] and not (known and known[1] > cli.EVENT_SKIP):
+                legal.discard(cli.EVENT_SKIP)  # the simulator's walk-away has no button
+            # The event's own option list: its fixed count when the simulator's table has
+            # one, else whatever is offered.
             n = known[1] if known else (max(legal) + 1 if legal else 0)
             if ph == sim.PHASE_ANCIENT:
                 keys = [f"NEOW.pages.INITIAL.options.{cli.relic_entry(r)}" for r in run.state_list(3, 3) if r]
@@ -242,13 +249,13 @@ class Engine:
             where = {pos: a for pos, a in enumerate(sorted(cli.selection_options(run)))}
             for position in ([int(p) for p in args["indices"].split(",")] if name == "select_cards" else []):
                 action = where.pop(position)
-                deck_before = [tuple(int(x) for x in c) for c in run.deck()]
+                deck_before = cli.deck_columns(run)
                 count = len(cli.selection_options(run))
                 self.step(action)
                 if not self._selection_open():
                     break
                 if deck_mode:
-                    moved = cli.follow_deck(deck_before, [tuple(int(x) for x in c) for c in run.deck()], action)
+                    moved = cli.follow_deck(deck_before, cli.deck_columns(run), action)
                     where = {pos: moved[a] for pos, a in where.items()}
                 elif len(cli.selection_options(run)) == count - 1:
                     where = {pos: a - (a > action) for pos, a in where.items()}
@@ -272,6 +279,9 @@ class Engine:
             else:
                 self.step(index)
         elif name in ("buy_card", "buy_relic", "buy_potion"):
+            if FAULT == "buy-fails" and name != "buy_potion":
+                # sts2-cli's DoBuyCard / DoBuyRelic catch the game's exception themselves.
+                raise Refusal(f"Buy {name[4:]} failed: Object reference not set to an instance of an object.")
             base = {"buy_card": 0, "buy_relic": 7, "buy_potion": 10}[name]
             key = {"buy_card": "card_index", "buy_relic": "relic_index", "buy_potion": "potion_index"}[name]
             self.step(base + int(args[key]))
@@ -311,6 +321,8 @@ def main() -> None:
                 break
             else:
                 out({"type": "error", "message": f"Unknown command: {cmd['cmd']}"})
+        except Refusal as exc:
+            out({"type": "error", "message": str(exc)})
         except Exception as exc:  # the real engine answers errors in-band too
             out({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
 

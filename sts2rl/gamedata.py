@@ -136,6 +136,14 @@ def event_options() -> dict[int, tuple[str, int]]:
 
 
 @cache
+def event_ids() -> dict[str, int]:
+    """The simulator's event constants, name -> id ("WelcomeToWongos" -> 41), for every
+    event, including those that build their options at run time."""
+    text = (paths.GENERATED.parent / "Core" / "Run" / "RunConstants.cs").read_text(encoding="utf-8")
+    return {name: int(i) for name, i in re.findall(r"public const int Event(\w+) = (-?\d+);", text)}
+
+
+@cache
 def card_pool(name: str) -> tuple[int, ...]:
     text = (paths.GENERATED / "CardPools.g.cs").read_text(encoding="utf-8")
     match = re.search(rf"ReadOnlySpan<int>\s+{name}\s*=>\s*\[([^\]]*)\]", text)

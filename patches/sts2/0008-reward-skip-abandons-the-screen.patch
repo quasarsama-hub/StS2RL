@@ -1,0 +1,122 @@
+diff --git a/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs b/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs
+new file mode 100644
+index 0000000..d8e77f0
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/RewardScreenSkipTests.cs
+@@ -0,0 +1,82 @@
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Effects;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Skipping a rewards screen gives up everything still on it. Only its queued potions
++/// went: the rest stayed in the state and came back on a later screen that never had
++/// them.
++/// </summary>
++public class RewardScreenSkipTests
++{
++    /// <summary>A fight's rewards screen with every card item still unclaimed.</summary>
++    private static RunEngine Screen()
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        RunRewardGenerator.PopulateCardReward(engine.State);
++        engine.State.RewardCardPending = true;
++        engine.State.PendingCardOffers.Add([.. engine.State.RewardCards]);
++        engine.State.PendingCardOffers.Add([.. engine.State.RewardCards]);
++        engine.State.Phase = RunPhase.RelicReward;
++        return engine;
++    }
++
++    private static void Skip(RunEngine engine) =>
++        Assert.Equal(0, engine.Step(RunConstants.RewardSkipAction, -1, out _, out _, out _));
++
++    [Fact]
++    public void SkippingLeavesNoCardRewardForALaterScreen()
++    {
++        var engine = Screen();
++        engine.State.PendingOtherCharacterCardRewards = 2;
++        engine.State.ExtraCardRewardsOwed = 1;
++
++        Skip(engine);
++
++        Assert.Equal(RunPhase.Map, engine.State.Phase);
++        Assert.False(RunRewardGenerator.HasPendingRewards(engine.State));
++        Assert.Empty(engine.State.PendingCardOffers);
++        Assert.Equal(0, engine.State.ExtraCardRewardsOwed);
++    }
++
++    [Fact]
++    public void SkippingGivesUpTheBonusRelicsStillQueued()
++    {
++        var engine = Screen();
++        engine.State.PendingBonusRelicRewards.Add(RunRewardGenerator.NextRelic(engine.State));
++
++        Skip(engine);
++
++        Assert.Empty(engine.State.PendingBonusRelicRewards);
++        Assert.Equal(0, engine.State.RelicReward);
++    }
++
++    /// <summary>
++    /// Lasting Candy's option belongs to the card reward it was rolled for. Skipped, it
++    /// used to be offered again on the next card screen that is not built by
++    /// PopulateCardReward -- Kaleidoscope's, say.
++    /// </summary>
++    [Fact]
++    public void ASkippedCandyOptionIsNotOfferedOnALaterCardScreen()
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        RunNonCombatEffects.ApplyRelicPickup(engine.State, RunNonCombatEffects.NamedRelic("LastingCandy"));
++        RelicEffects.CountCombatForLastingCandy(engine.State);
++        RelicEffects.CountCombatForLastingCandy(engine.State);
++        RunRewardGenerator.PopulateCardReward(engine.State);
++        Assert.NotEqual(0, engine.State.LastingCandyRewardCard);
++        engine.State.RewardCardPending = true;
++        engine.State.Phase = RunPhase.RelicReward;
++
++        Skip(engine);
++        RunRewardGenerator.EnterOtherCharacterCardReward(engine.State);
++
++        Assert.Equal(0, engine.State.LastingCandyRewardCard);
++        Assert.Equal(-1, engine.Step(RunConstants.RewardFourthCardAction, -1, out _, out _, out _));
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 9bd9ac3..3507687 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -1954,6 +1954,15 @@ public sealed class RunEngine
+             // wrong for every event, whose second queued potion is declined far more often
+             // than it is taken.
+             State.PendingPotionRewards.Clear();
++            // And everything else on it: the card reward and the offers queued behind it,
++            // Kaleidoscope's, Prayer Wheel's still owed, the bonus relics. Only the potions
++            // went, so the rest stayed in the state and came back on a later screen that
++            // never had them -- an event's potion offer resets gold, relic and potion only,
++            // and an unclaimed Prayer Wheel reward added up fight after fight.
++            RunRewardGenerator.ClearRewardScreen(State);
++            State.PendingOtherCharacterCardRewards = 0;
++            State.PendingBonusRelicRewards.Clear();
++            State.ExtraCardRewardsOwed = 0;
+             return LeaveRewardScreen(out terminal);
+         }
+ 
+diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+index b539376..6a02478 100644
+--- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+@@ -553,6 +553,9 @@ public static class RunRewardGenerator
+         state.RelicReward = 0;
+         state.PendingGoldRewards.Clear();
+         state.PendingCardOffers.Clear();
++        // Lasting Candy's option belongs to the card reward it was rolled for.
++        state.LastingCandyRewardCard = 0;
++        state.LastingCandyRewardUpgraded = false;
+     }
+ 
+     /// <summary>Moves the next queued gold pile onto the screen, if the screen is free.</summary>

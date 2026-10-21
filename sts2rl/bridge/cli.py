@@ -50,6 +50,10 @@ BETWEEN_ACT_HEAL = 0.8
 COMBAT_ROOMS = {"Monster", "Elite", "Boss"}
 KNOWN_SCREENS = {"combat_play", "card_select", "card_reward", "map_select", "rest_site", "shop", "event_choice", "bundle_select", "game_over"}
 AUTO_LIMIT = 32  # non-decision steps in a row before the shadow is declared lost
+# Errors sts2-cli answers without a stack trace although the engine failed: the game's own
+# exception, caught and reported as a plain message (buying, removing), and a card the
+# game itself called playable that did not leave the hand (its action queue stalled).
+ENGINE_FAILURES = ("Buy card failed:", "Buy relic failed:", "Remove card failed:", "Card could not be played (still in hand after action)")
 MAX_PICKS = 10
 PHASE_NAMES = {
     0: "combat", 1: "card reward", 2: "map", 3: "rest site", 4: "shop", 5: "rewards", 6: "run over",
@@ -298,6 +302,12 @@ def same_card(a: tuple, b: tuple) -> bool:
     return a[0] == b[0] and (a[1] is None or b[1] is None or a[1] == b[1])
 
 
+def deck_columns(run: sim.Run) -> list[tuple[int, ...]]:
+    """The deck with every column (id, upgraded, enchantment, amount), so that an in-place
+    enchant is a visible change to follow_deck."""
+    return [tuple(int(x) for x in c) for c in run.deck()]
+
+
 def follow_deck(before: list, after: list, picked: int) -> dict[int, int] | None:
     """Where each card of `before` (other than the one at `picked`) sits in `after`.
 
@@ -413,12 +423,13 @@ class CliSession:
         state = self.game.act(action, **args)
         self.log(kind="command", action=action, args=args, answer=state.get("decision") or state.get("type"))
         if state.get("type") == "error":
-            if state.get("stack_trace"):
+            message = state.get("message") or ""
+            if state.get("stack_trace") or message.startswith(ENGINE_FAILURES):
                 # An exception inside sts2-cli: the engine broke, not the shadow.
-                raise CliError(f"engine failed on {action} {args}: {state.get('message')}")
+                raise CliError(f"engine failed on {action} {args}: {message}")
             # A rule refusal ("Not enough gold", "Invalid card index", ...): the simulator
             # thought the move legal and the game does not -- a divergence.
-            raise Desync(f"engine refused {action} {args}: {state.get('message')}")
+            raise Desync(f"engine refused {action} {args}: {message}")
         return state
 
     # -- the loop ----------------------------------------------------------------------
@@ -518,7 +529,7 @@ class CliSession:
             # rewards (the screen's order; a potion with the belt full is lost, in both),
             # and shows a card reward as a screen of its own. It shows only the first card
             # reward of a fight, so any further one is left on the shadow's screen too.
-            gold, potion, relic, _ = run.state_list(6, 4)
+            gold, potion, relic, flagged = run.state_list(6, 4)
             plain = int(bool(gold)) + int(bool(potion)) + int(bool(relic))
             for index in range(plain):
                 if index in legal:
@@ -527,6 +538,11 @@ class CliSession:
             # five, The Hunt's extra one) carries no flag of its own.
             cards = [a for a in legal if plain <= a < REWARD_SKIP]
             if cards and decision == "card_reward":
+                return cards[0]
+            if len(cards) > flagged:
+                # The first item is the queue's head, rolled when it was queued: opening it
+                # draws nothing, and the card-reward branch below gives it up. So each offer
+                # the engine dropped is counted, and none is left queued on the shadow.
                 return cards[0]
             if cards:
                 self._forfeit("card reward")
@@ -821,10 +837,6 @@ class CliSession:
                 return run.phase == sim.PHASE_COMBAT and run.pending_selection() > 0
             return (run.phase, tuple(run.state_list(20, 3))) == signature
 
-        def deck_now() -> list[tuple[int, ...]]:
-            # Every column, so an in-place enchant is a visible change.
-            return [tuple(int(x) for x in c) for c in run.deck()]
-
         while True:
             if len(steps) >= MAX_PICKS:
                 raise RuntimeError(f"selection still open after {MAX_PICKS} steps")
@@ -842,7 +854,7 @@ class CliSession:
                     raise Desync(f"selection slot {position}: game has {gd.card_name(game_cards[position][0])}, sim picks {gd.card_name(card[0])}")
                 picks.append(position)
                 del where[position]
-            deck_before = deck_now() if deck_mode else None
+            deck_before = deck_columns(run) if deck_mode else None
             steps.append((action, -1))
             if not run.step(action):
                 raise Desync(f"the simulator refused selection {action}")
@@ -850,7 +862,7 @@ class CliSession:
                 break  # declined, finished early, or the screen closed itself
             after = selection_options(run)
             if deck_mode:
-                moved = follow_deck(deck_before, deck_now(), action)
+                moved = follow_deck(deck_before, deck_columns(run), action)
                 if moved is None:
                     raise Desync("selection: the simulator changed the deck in a way the bench cannot follow")
                 where = {pos: moved[a] for pos, a in where.items()}
