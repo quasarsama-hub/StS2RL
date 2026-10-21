@@ -50,7 +50,7 @@ and play worse than the heuristic it was supposed to improve on.)
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
 captures, exact RNG, exact map generation). It's pinned as a git submodule; this repo
-carries ten patches for it (`patches/sts2/`):
+carries twelve patches for it (`patches/sts2/`):
 
 | patch | what it does |
 |---|---|
@@ -64,9 +64,11 @@ carries ten patches for it (`patches/sts2/`):
 | `0008-reward-skip-abandons-the-screen` | Skipping a rewards screen gave up only its queued potions. An unclaimed card reward, the offers queued behind it, Kaleidoscope's, the relic and bonus relics, Prayer Wheel's reward still owed and Lasting Candy's option all stayed in the state and came back on a later screen that never had them (an unclaimed Prayer Wheel reward added up fight after fight). Now a skip abandons what is on the screen, as in the game, and only that: it is also the plain Proceed off an emptied screen, and an Orrery bought at the shop still owes its five. Neow's Bones' screen can no longer be skipped (the game offers it WithSkippingDisallowed). |
 | `0009-rest-site-proceed-after-an-option` | A rest site's Proceed was offered from the start, so a run could leave with nothing done; the game keeps the button off until an option is taken (all 27 recorded rest sites). The trained agent took that way out in a few held-out runs (EVAL001019 left two rest sites, at 71/80 and 38/80 HP). Also, a rest left by Dream Catcher's card reward kept its result page pending, and the next rest site's first move did nothing but leave. |
 | `0010-direct-card-rewards-offer-every-screen` | The Trial (a Nondescript defendant found guilty: two card rewards) and Colorful Philosophers (three) offered only the first; answering it went straight to the map, and the rest stayed queued for whatever rewards screen came next. Now each is offered in turn, as sts2-cli shows them. |
+| `0011-screens-opened-from-rewards-return-to-them` | A relic claimed off a rewards screen that opens a screen of its own (Precise Scissors, Pomander, Lead Paperweight, …) now comes back to the rewards screen; it went to the map, Neow or the event instead, and the rest of the screen was lost — a fight's card reward, or Neow's Bones' second relic and its curse (whose flag then held Proceed off on later screens). Also: an elite's relic flag no longer outlives its screen (the next rest-site or Trial card reward handed out a free relic), Dream Catcher's card shares Tiny Mailbox's rewards screen instead of vanishing, and Smith is spent like every other rest option, so Miniature Tent's second option survives it. |
+| `0012-only-modelled-potions-can-be-drunk` | **55 of the 63 potions have no effect in the simulator yet** (it says so: "populated incrementally as potions are reverse-engineered"), but every one could be drunk — as a no-op that only emptied the slot, which the game never does. The trained agent drank them 546 times on the 128 test seeds, and on the real engine every such potion would end the run as a desync. Now only the eight modelled ones (Block, Clarity, Duplicator, Gigantification, Powdered Demise, Radiant Tincture, Regen, Shackling) can be drunk; the agent holds the rest. Fairy in a Bottle is never drunk by hand (it is Automatic) and keeps its revive. |
 
-The simulator's own test suite passes with all ten patches applied (4,818 tests, including
-regression tests patches 5–10 add).
+The simulator's own test suite passes with all twelve patches applied (4,827 tests, including
+regression tests patches 5–12 add).
 
 ## Results so far
 
@@ -75,7 +77,7 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with all ten simulator patches, and with the agent unable to walk away from an event (a
+with all twelve simulator patches, and with the agent unable to walk away from an event (a
 move the simulator allows and the game does not; see the sts2-cli section)
 (`results/dev-run/final-eval-patch0006/`):
 
@@ -336,6 +338,10 @@ What the bench has to work around, and how:
   be only as good as the simulator there, and expect the live bridge to stop on a desync
   more often in later acts. Act 3's three ancients aren't implemented in the simulator,
   so the agent skips their blessings (harder than the real game, never easier).
+* **Most potions are not modelled.** Only 8 of the 63 have an effect in the simulator, so
+  the agent drinks only those and carries the rest (simulator patch 0012). Every potion it
+  holds is a fight it plays without help the real game would give. sts2-cli reports each
+  potion's numbers (`vars` in its state), which is the data to port the rest from.
 * **Ironclad, Ascension 8 only.** The simulator's run setup is Ironclad at A8. The other
   four characters' cards are all implemented in the simulator; adding them is mostly
   run-setup work there.

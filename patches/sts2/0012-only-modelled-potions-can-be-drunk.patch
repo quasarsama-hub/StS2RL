@@ -1,0 +1,128 @@
+diff --git a/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs b/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs
+new file mode 100644
+index 0000000..3ea1047
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs
+@@ -0,0 +1,60 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Effects;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Only potions with a modelled effect can be drunk. Drinking any other did nothing but
++/// empty its slot, which the game never does, and an agent searching over it learned a
++/// discard where the game would have applied the potion.
++/// </summary>
++public class PotionModelledTests
++{
++    private static int Id(string name) => GeneratedData.Potions.FindId(name)!.Value;
++
++    private static Fight WithPotion(int potionId)
++    {
++        var fight = Fight.Hand().Energy(3);
++        fight.State.PotionSlots[0] = potionId;
++        return fight;
++    }
++
++    private static bool Offered(Fight fight) =>
++        CombatEngine.ValidActions(fight.State).Contains(fight.State.Hand.Count + 1);
++
++    [Fact]
++    public void OnlyModelledPotionsAreOffered()
++    {
++        for (int id = 1; id <= 63; id++)
++        {
++            Assert.Equal(PotionEffects.IsModelled(id), Offered(WithPotion(id)));
++        }
++
++        Assert.True(Offered(WithPotion(Id("BlockPotion"))));
++        Assert.False(Offered(WithPotion(Id("FirePotion"))));
++    }
++
++    /// <summary>Fairy in a Bottle is Automatic: never drunk by hand, kept for its revive.</summary>
++    [Fact]
++    public void FairyInABottleIsNeverDrunkByHand()
++    {
++        var fight = WithPotion(Id("FairyInABottle"));
++
++        Assert.False(Offered(fight));
++        fight.Potion(0);
++        Assert.Equal(Id("FairyInABottle"), fight.State.PotionSlots[0]);
++    }
++
++    /// <summary>An unmodelled potion forced through stays in its slot.</summary>
++    [Fact]
++    public void AnUnmodelledPotionIsNotUsedUp()
++    {
++        var fight = WithPotion(Id("FirePotion"));
++
++        fight.Potion(0);
++
++        Assert.Equal(Id("FirePotion"), fight.State.PotionSlots[0]);
++    }
++}
+diff --git a/src/Sts2Emulator.Tests/Relics/SharedPoolRelicTests.cs b/src/Sts2Emulator.Tests/Relics/SharedPoolRelicTests.cs
+index e047d42..f600bd3 100644
+--- a/src/Sts2Emulator.Tests/Relics/SharedPoolRelicTests.cs
++++ b/src/Sts2Emulator.Tests/Relics/SharedPoolRelicTests.cs
+@@ -310,7 +310,8 @@ public class ReptileTrinketTests
+     {
+         var fight = Fight.WithRelics(RelicEffects.ReptileTrinket);
+         fight.State.PlayerHp = 999;
+-        fight.State.PotionSlots[0] = 1;
++        // Block Potion: a potion that can be drunk here and grants no Strength of its own.
++        fight.State.PotionSlots[0] = 5;
+ 
+         fight.Potion(0);
+         Assert.Equal(3, fight.PlayerBuffAmount(BuffId.Strength));
+diff --git a/src/Sts2Emulator/Core/CombatEngine.cs b/src/Sts2Emulator/Core/CombatEngine.cs
+index f3308c6..d5ea5b2 100644
+--- a/src/Sts2Emulator/Core/CombatEngine.cs
++++ b/src/Sts2Emulator/Core/CombatEngine.cs
+@@ -1898,7 +1898,11 @@ public static class CombatEngine
+ 
+     private static StepResult UsePotion(CombatState state, int slot, Random? rng)
+     {
+-        if (slot < 0 || slot >= state.PotionSlots.Length || state.PotionSlots[slot] == 0)
++        if (
++            slot < 0
++            || slot >= state.PotionSlots.Length
++            || !Effects.PotionEffects.IsModelled(state.PotionSlots[slot])
++        )
+         {
+             return StepResult.Invalid;
+         }
+@@ -2415,7 +2419,7 @@ public static class CombatEngine
+ 
+         for (int s = 0; s < state.PotionSlots.Length; s++)
+         {
+-            if (state.PotionSlots[s] != 0)
++            if (Effects.PotionEffects.IsModelled(state.PotionSlots[s]))
+             {
+                 actions.Add(state.Hand.Count + 1 + s);
+             }
+diff --git a/src/Sts2Emulator/Core/Effects/PotionEffects.cs b/src/Sts2Emulator/Core/Effects/PotionEffects.cs
+index 68e6981..f30131b 100644
+--- a/src/Sts2Emulator/Core/Effects/PotionEffects.cs
++++ b/src/Sts2Emulator/Core/Effects/PotionEffects.cs
+@@ -17,6 +17,17 @@ public static class PotionEffects
+     /// <summary>`PowderedDemise`'s `DynamicVar("Demise", 9)`.</summary>
+     private const int PowderedDemiseAmount = 9;
+ 
++    /// <summary>
++    /// The potions <see cref="Apply" /> gives an effect -- the rest are not reverse-engineered
++    /// yet. Only these can be drunk: drinking any other did nothing here but empty its slot,
++    /// a result the game never produces (its effect lands, or it is not drunk at all).
++    /// Fairy in a Bottle is not among them on purpose: it is Automatic, never drunk by hand,
++    /// and its revive is <c>CombatEngine.PlayerIsDead</c>'s.
++    /// </summary>
++    private static readonly int[] Modelled = [5, 9, 17, 32, 47, 49, 50, 51];
++
++    public static bool IsModelled(int potionId) => Array.IndexOf(Modelled, potionId) >= 0;
++
+     public static void Apply(int potionId, CombatState state, Random? rng = null)
+     {
+         // Populated incrementally as potions are reverse-engineered from sts2.dll.

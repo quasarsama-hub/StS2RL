@@ -22,6 +22,7 @@ from sts2rl.bridge import cli, cli_eval
 
 FAKE = [sys.executable, str(Path(__file__).with_name("fake_sts2cli.py"))]
 CFG = dict(combat_sims=8, samples=1, max_act=1, record=False)
+ACT_1_CLEARED = ("EVAL000066", 7_000_066)  # a seed and agent seed whose run beats the Act 1 boss
 
 
 def bench(seed: str, agent_seed: int = 7_000_000, trace: Path | None = None, **cfg):
@@ -30,7 +31,7 @@ def bench(seed: str, agent_seed: int = 7_000_000, trace: Path | None = None, **c
         return cli.CliSession(game, agent, cli.Names(None), seed, trace_path=trace).play()
 
 
-# 43 meets an event it could walk away from; 13 a rest site it could leave with nothing done
+# 43 meets an event it could walk away from
 @pytest.mark.parametrize("seed", ["EVAL000000", "EVAL000008", "EVAL000013", "EVAL000015", "EVAL000043"])
 def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed, tmp_path):
     result = bench(seed, trace=tmp_path / "trace.jsonl")
@@ -47,14 +48,14 @@ def test_a_faithful_engine_stays_in_sync_and_matches_the_simulator(seed, tmp_pat
 
 
 def test_a_run_capped_at_act_1_finishes_when_act_1_is_cleared():
-    result = bench("EVAL000013", agent_seed=7_000_013)
+    result = bench(*ACT_1_CLEARED)
     assert result.in_sync and result.finished, result.desync_reason
     assert result.won and result.acts_cleared == 1
 
 
 def test_crossing_into_act_2_with_the_engines_between_act_heal():
     # sts2-cli heals as soon as the boss dies; the shadow, on the act's ancient.
-    result = bench("EVAL000013", agent_seed=7_000_013, max_act=2)
+    result = bench(*ACT_1_CLEARED, max_act=2)
     assert result.in_sync, result.desync_reason
     assert result.final_floor > 18
 
@@ -64,7 +65,7 @@ def test_unpatched_sts2cli_heal_rounding_is_caught(monkeypatch):
     # patches/sts2-cli/0001 makes sts2-cli do so). The stand-in heals by its own copy of
     # sts2-cli's formula, so this checks the bench's expectation, not a shared constant.
     monkeypatch.setenv("FAKE_STS2CLI_FAULT", "ceil-heal")
-    result = bench("EVAL000013", agent_seed=7_000_013, max_act=2)
+    result = bench(*ACT_1_CLEARED, max_act=2)
     assert not result.in_sync and result.desync_floor == 17
     game, sim_hp = re.match(r"hp \(between-act heal\): game=(\d+) sim=(\d+)", result.desync_reason).groups()
     assert int(game) == int(sim_hp) + 1

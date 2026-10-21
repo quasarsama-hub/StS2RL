@@ -1,0 +1,315 @@
+diff --git a/src/Sts2Emulator.Tests/RewardScreenReturnTests.cs b/src/Sts2Emulator.Tests/RewardScreenReturnTests.cs
+new file mode 100644
+index 0000000..42449bf
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/RewardScreenReturnTests.cs
+@@ -0,0 +1,178 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Screens a rewards screen opens come back to it, and what the screen held does not leak
++/// into later ones.
++/// </summary>
++public class RewardScreenReturnTests
++{
++    private static RunEngine Run(string seed = "NXV45HW43K")
++    {
++        var engine = new RunEngine();
++        engine.Reset(seed);
++        return engine;
++    }
++
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    private static int[] Mask(RunEngine engine)
++    {
++        var mask = new int[RunConstants.MaxActions];
++        engine.WriteActionMask(mask);
++        return mask;
++    }
++
++    /// <summary>Picks deck cards until the selection screen closes.</summary>
++    private static void FinishSelection(RunEngine engine)
++    {
++        while (engine.State.Phase == RunPhase.TransformSelect)
++        {
++            int pick = Enumerable
++                .Range(0, engine.State.Deck.Count)
++                .First(i =>
++                    engine.State.PendingRestUpgrade
++                        ? RunConstants.IsRunCardUpgradable(engine.State.Deck[i])
++                        : RunNonCombatEffects.CanSelectCard(engine.State, i)
++                );
++            Step(engine, pick);
++        }
++    }
++
++    /// <summary>
++    /// A relic claimed off a fight's screen that opens a selection (Precise Scissors'
++    /// removal) opens it over the screen; the card reward is still there afterwards. It
++    /// used to go to the map and take the card reward with it.
++    /// </summary>
++    [Fact]
++    public void ASelectionARelicOpensComesBackToTheRewardsScreen()
++    {
++        var engine = Run();
++        RunRewardGenerator.PopulateCardReward(engine.State);
++        engine.State.RewardCardPending = true;
++        engine.State.RelicReward = RunNonCombatEffects.NamedRelic("PreciseScissors");
++        engine.State.Phase = RunPhase.RelicReward;
++
++        Step(engine, 0);
++        Assert.Equal(RunPhase.TransformSelect, engine.State.Phase);
++        FinishSelection(engine);
++
++        Assert.Equal(RunPhase.RelicReward, engine.State.Phase);
++        Assert.True(engine.State.RewardCardPending);
++        Assert.Equal(1, Mask(engine)[0]);
++    }
++
++    /// <summary>
++    /// Neow's Bones whose first relic opens a selection (here Precarious Shears): the
++    /// second relic is still offered, and claiming it adds the curse. The second relic and
++    /// the curse used to be lost, and the curse's flag left set.
++    /// </summary>
++    [Fact]
++    public void NeowsBonesSecondRelicSurvivesAScreenTheFirstOpens()
++    {
++        var engine = Run();
++        engine.State.Phase = RunPhase.Ancient;
++        engine.State.NeowOptions[0] = RunConstants.RelicNeowsBones;
++        Step(engine, 0);
++        engine.State.RelicReward = RunNonCombatEffects.NamedRelic("PrecariousShears");
++        int second = engine.State.PendingBonusRelicRewards.Single();
++
++        Step(engine, 0);
++        FinishSelection(engine);
++
++        Assert.Equal(RunPhase.RelicReward, engine.State.Phase);
++        Assert.Equal(second, engine.State.RelicReward);
++        Assert.Equal(0, Mask(engine)[RunConstants.RewardSkipAction]);
++        Step(engine, 0);
++        // The flag clears only as the curse is added (AddNeowsBonesCurse).
++        Assert.False(engine.State.PendingNeowsBonesCurse);
++        Assert.Equal(RunPhase.Ancient, engine.State.Phase);
++    }
++
++    /// <summary>The no-skip rule is Neow's own: a flag left over cannot hold a fight's screen.</summary>
++    [Fact]
++    public void ALeftoverNeowsBonesFlagDoesNotHoldALaterScreen()
++    {
++        var engine = Run();
++        engine.State.PendingNeowsBonesCurse = true;
++        engine.State.RewardGold = 15;
++        engine.State.Phase = RunPhase.RelicReward;
++
++        Assert.Equal(1, Mask(engine)[RunConstants.RewardSkipAction]);
++    }
++
++    /// <summary>
++    /// An elite's relic flag dies with its screen: Dream Catcher's card reward at the next
++    /// rest used to open a rewards screen with a freshly pulled relic.
++    /// </summary>
++    [Fact]
++    public void NoFreeRelicAfterAnEliteFromTheNextCardRewardWithoutAScreen()
++    {
++        var engine = Run();
++        RunNonCombatEffects.ApplyRelicPickup(engine.State, RunNonCombatEffects.NamedRelic("DreamCatcher"));
++        engine.State.PendingRelicReward = true;
++        engine.State.Phase = RunPhase.RelicReward;
++        Step(engine, RunConstants.RewardSkipAction);
++        int relics = engine.State.Relics.Count;
++
++        engine.State.Phase = RunPhase.Rest;
++        engine.State.RestOptionsTaken = 0;
++        engine.State.RestResultPending = false;
++        Step(engine, RunConstants.RestHealAction);
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Step(engine, RunConstants.RewardSkipAction);
++
++        Assert.NotEqual(RunPhase.RelicReward, engine.State.Phase);
++        Assert.Equal(relics, engine.State.Relics.Count);
++    }
++
++    /// <summary>Dream Catcher's card and Tiny Mailbox's potions share one rewards screen.</summary>
++    [Fact]
++    public void DreamCatchersCardSharesTinyMailboxsScreen()
++    {
++        var engine = Run();
++        RunNonCombatEffects.ApplyRelicPickup(engine.State, RunNonCombatEffects.NamedRelic("DreamCatcher"));
++        RunNonCombatEffects.ApplyRelicPickup(engine.State, RunNonCombatEffects.NamedRelic("TinyMailbox"));
++        engine.State.Phase = RunPhase.Rest;
++        engine.State.RestOptionsTaken = 0;
++        int deck = engine.State.Deck.Count;
++
++        Step(engine, RunConstants.RestHealAction);
++        Assert.Equal(RunPhase.RelicReward, engine.State.Phase);
++        Assert.True(engine.State.RewardCardPending);
++        Step(engine, 1); // the card item, after the potion
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Step(engine, 0);
++
++        Assert.Equal(deck + 1, engine.State.Deck.Count);
++    }
++
++    /// <summary>
++    /// Smithing is spent like any other rest option: with Miniature Tent the site stays
++    /// open and Heal still heals. It used to end the visit, Heal leaving without healing.
++    /// </summary>
++    [Fact]
++    public void WithMiniatureTentSmithingFirstStillLeavesHeal()
++    {
++        var engine = Run();
++        RunNonCombatEffects.ApplyRelicPickup(engine.State, RunNonCombatEffects.NamedRelic("MiniatureTent"));
++        engine.State.Phase = RunPhase.Rest;
++        engine.State.RestOptionsTaken = 0;
++        engine.State.PlayerHp = 20;
++
++        Step(engine, RunConstants.RestUpgradeAction);
++        FinishSelection(engine);
++        Assert.Equal(RunPhase.Rest, engine.State.Phase);
++        var mask = Mask(engine);
++        Assert.Equal(0, mask[RunConstants.RestUpgradeAction]);
++        Assert.Equal(1, mask[RunConstants.RestHealAction]);
++        Step(engine, RunConstants.RestHealAction);
++
++        Assert.True(engine.State.PlayerHp > 20);
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index d78b90d..664e0b1 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -763,7 +763,7 @@ public sealed class RunEngine
+                 WriteRewardActionMask(mask);
+                 // Neow's Bones offers its two relics WithSkippingDisallowed: the screen
+                 // cannot be left while one of them is still on it to claim.
+-                if (!(State.PendingNeowsBonesCurse && mask[0] != 0))
++                if (!NeowsBonesRelicOnScreen())
+                 {
+                     SetMask(mask, RunConstants.RewardSkipAction);
+                 }
+@@ -1963,6 +1963,10 @@ public sealed class RunEngine
+         return AdvanceAfterNode(out terminal);
+     }
+ 
++    /// <summary>Neow's own screen with one of Neow's Bones' relics on it.</summary>
++    private bool NeowsBonesRelicOnScreen() =>
++        State.NeowAwaitingProceed && State.PendingNeowsBonesCurse && State.RelicReward != 0;
++
+     private int StepRelicReward(int action, out bool terminal)
+     {
+         terminal = false;
+@@ -1978,6 +1982,11 @@ public sealed class RunEngine
+             return 0;
+         }
+ 
++        if (action == RunConstants.RewardSkipAction && NeowsBonesRelicOnScreen())
++        {
++            return -1;
++        }
++
+         if (action == RunConstants.RewardSkipAction)
+         {
+             // Skipping the screen abandons everything still on it, queued potions included.
+@@ -2082,6 +2091,10 @@ public sealed class RunEngine
+     private int LeaveRewardScreen(out bool terminal)
+     {
+         terminal = false;
++        // Set with the elite's relic, which went straight onto this screen. Left set, the
++        // next card reward with no screen to return to (Dream Catcher's, the Trial's)
++        // opened a rewards screen with a freshly pulled relic on it.
++        State.PendingRelicReward = false;
+ 
+         // `CardRemovalReward` is claimed FROM the reward screen, so it is answered as the
+         // screen is left rather than before it. One selection at a time: the screen reopens
+@@ -2441,6 +2454,9 @@ public sealed class RunEngine
+             // to take it, and may drop a held potion to make room.
+             if (Effects.RelicEffects.Has(State.Relics, Effects.RelicEffects.TinyMailbox))
+             {
++                // Dream Catcher's card, if it offered one, shares the screen: both are
++                // TryModifyRestSiteHealRewards hooks feeding one offer.
++                State.RewardCardPending = State.Phase == RunPhase.CardReward;
+                 State.PendingPotionRewards.AddRange([0, 0]);
+                 OfferNextRestPotion();
+                 State.Phase = RunPhase.RelicReward;
+@@ -4697,6 +4713,24 @@ public sealed class RunEngine
+         return CloseOfferGrid();
+     }
+ 
++    /// <summary>
++    /// A relic claimed off a rewards screen that opens a screen of its own (Pomander,
++    /// Precise Scissors, Lead Paperweight, ...) opens it OVER the rewards screen, and
++    /// closing it lands back there with the rest still to claim. These returns went to
++    /// the map, Neow or the event instead, and everything left on the screen was lost --
++    /// Neow's Bones' second relic, and with it the curse, among them.
++    /// </summary>
++    private bool ReturnToRewardScreen()
++    {
++        if (!RunRewardGenerator.HasPendingRewards(State))
++        {
++            return false;
++        }
++
++        State.Phase = RunPhase.RelicReward;
++        return true;
++    }
++
+     /// <summary>Shuts the offer grid and runs whatever was waiting behind it.</summary>
+     private int CloseOfferGrid()
+     {
+@@ -4716,6 +4750,11 @@ public sealed class RunEngine
+             );
+         }
+ 
++        if (ReturnToRewardScreen())
++        {
++            return 0;
++        }
++
+         // A grid Neow opened returns to Neow, which stays up for one more Proceed. One an
+         // EVENT opened returns to the event's finished page.
+         if (State.NeowAwaitingProceed)
+@@ -4974,6 +5013,11 @@ public sealed class RunEngine
+         State.BundleOffer = [];
+         State.SelectedBundle = -1;
+ 
++        if (ReturnToRewardScreen())
++        {
++            return 0;
++        }
++
+         // A screen Neow opened returns to Neow, which stays up for one more Proceed.
+         if (State.NeowAwaitingProceed)
+         {
+@@ -5004,9 +5048,10 @@ public sealed class RunEngine
+ 
+             State.Deck[action] = State.Deck[action] with { Upgraded = true };
+             State.PendingRestUpgrade = false;
+-            State.RestResultPending = true;
+-            State.RestOptionsTaken = 0;
+             State.Phase = RunPhase.Rest;
++            // Spent like every other option, so Miniature Tent keeps the site open after
++            // it too; this ended the visit whatever the relics said.
++            FinishRestOption(RunConstants.RestUpgradeAction);
+             return 0;
+         }
+ 
+@@ -5035,6 +5080,11 @@ public sealed class RunEngine
+             var returnTo = State.PendingSelectionReturn;
+             RunNonCombatEffects.ClearDeckSelection(State);
+ 
++            if (ReturnToRewardScreen())
++            {
++                return 0;
++            }
++
+             // A selection NEOW opened returns to Neow, which stays up for one more
+             // Proceed. Leaving the flag set instead is worse than landing on the wrong
+             // screen once: it is read again by the next card reward the run claims, which
