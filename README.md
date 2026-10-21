@@ -62,7 +62,7 @@ carries ten patches for it (`patches/sts2/`):
 | `0006-treasure-chest-relic` | Treasure chests paid their gold but **never their relic**: the game's `treasure_room_relics` RNG stream and shared relic bag were built and cloned but never drawn from, so every simulated run was a relic or two short by mid-Act 1. Chests now offer their relic on the reward screen (rarity rolled on that stream, drawn from the shared bag). Checked against every chest in the recorded real-game runs: **11 of 11 offer exactly the relic the game offered** (Vajra, Red Mask, Oddly Smooth Stone, Stone Cracker, Blood Vial, …). Also, Silver Crucible ("the first Treasure Chest you open is empty") emptied every chest; now only the first. |
 | `0007-fourth-reward-observation-offset` | Lasting Candy's fourth card-reward option was written into the deck block of the observation instead of its own (an offset used without the run block's base), so nothing could read it. |
 | `0008-reward-skip-abandons-the-screen` | Skipping a rewards screen gave up only its queued potions. An unclaimed card reward, the offers queued behind it, Kaleidoscope's, the relic and bonus relics, Prayer Wheel's reward still owed and Lasting Candy's option all stayed in the state and came back on a later screen that never had them (an unclaimed Prayer Wheel reward added up fight after fight). Now a skip abandons what is on the screen, as in the game, and only that: it is also the plain Proceed off an emptied screen, and an Orrery bought at the shop still owes its five. Neow's Bones' screen can no longer be skipped (the game offers it WithSkippingDisallowed). |
-| `0009-rest-site-proceed-after-an-option` | A rest site's Proceed was offered from the start, so a run could leave with nothing done; the game keeps the button off until an option is taken (all 27 recorded rest sites). The trained agent took that way out in 3 of 128 held-out runs. Also, a rest left by Dream Catcher's card reward kept its result page pending, and the next rest site's first move did nothing but leave. |
+| `0009-rest-site-proceed-after-an-option` | A rest site's Proceed was offered from the start, so a run could leave with nothing done; the game keeps the button off until an option is taken (all 27 recorded rest sites). The trained agent took that way out in a few held-out runs (EVAL001019 left two rest sites, at 71/80 and 38/80 HP). Also, a rest left by Dream Catcher's card reward kept its result page pending, and the next rest site's first move did nothing but leave. |
 | `0010-direct-card-rewards-offer-every-screen` | The Trial (a Nondescript defendant found guilty: two card rewards) and Colorful Philosophers (three) offered only the first; answering it went straight to the map, and the rest stayed queued for whatever rewards screen came next. Now each is offered in turn, as sts2-cli shows them. |
 
 The simulator's own test suite passes with all ten patches applied (4,818 tests, including
@@ -81,27 +81,31 @@ move the simulator allows and the game does not; see the sts2-cli section)
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
-| heuristic, no training | 48 | 0.140 | 26% [19–34%] | 0 | 14.3 |
-| **trained** (`models/best.pt`) | 48 | 0.190 | **59% [50–67%]** | 1 run | 19.4 |
-| **trained**, deeper search | 128 | 0.202 | 56% [48–65%] | 2 runs | 20.6 |
+| heuristic, no training | 48 | 0.141 | 25% [18–33%] | 0 | 14.4 |
+| **trained** (`models/best.pt`) | 48 | 0.195 | **59% [50–67%]** | 3 runs | 19.9 |
+| **trained**, deeper search | 128 | 0.204 | **67% [59–75%]** | 1 run | 20.9 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 75 seeds to the heuristic's 33 (74
-seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.050 [+0.037,
-+0.063]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
+Paired, at 48 sims: the trained agent clears Act 1 on 75 seeds to the heuristic's 32 (67
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.054 [+0.039,
++0.069]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
 (about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
-+0.012 [+0.002, +0.022], p = 0.01; 1.2 floors) but does not clear Act 1 measurably more
-often (72 vs 75 seeds, 37 differ, p = 0.74). Deaths moved from Act 1 hallway fights
-(Phantasmal Gardeners, Phrog Parasite, Byrdonis) to Slumbering Beetle, the Act 1 bosses
-(Vantom, Lagavulin Matriarch, Kin) and the early Act 2.
++0.010 [+0.000, +0.019], p = 0.03; one floor) and clears Act 1 on 86 seeds to 75 — a hint,
+not yet significant (31 differ, p = 0.07). Deaths moved from Act 1 hallway fights
+(Phantasmal Gardeners, Phrog Parasite, Byrdonis) to Slumbering Beetle, Spiny Toad, the Act
+1 bosses (Lagavulin Matriarch, Vantom) and the early Act 2.
 
-The checkpoint was trained *before* patches 0006–0008 and the event fix. The trained rows
-read 44% / 55% with none of them (`results/dev-run/final-eval/`) and 52% / 66% with the
-chest relics but the walk-away still allowed (commit 8f987fd); the heuristic went 14% →
-27% → 26%. (A measurement in between, commit 068659c, read 55% / 59% and 30%: a bug in
-that version let the agent walk away from the events that build their options at run
-time. Fixed, every one of the 256 trained runs above plays exactly as it did before the
-bug.) On 128 seeds a single rate is good to about ±8 points (95%), so read the history as
-"chest relics help a lot, the rest is noise" rather than to the point.
+The checkpoint was trained *before* patches 0006–0010 and the event fix. The trained rows
+read 44% / 55% with none of them (`results/dev-run/final-eval/`), 52% / 66% with the chest
+relics but the walk-away still allowed (commit 8f987fd), and 59% / 56% before rest sites
+lost their Proceed-from-the-start (commit d2235b2); the heuristic went 14% → 27% → 26% →
+25%. That last fix changed the move only at a few rest sites, yet most runs play out
+differently since: every candidate move the agent weighs draws from its random stream, so
+one candidate fewer at a rest site re-rolls every decision after it. The 128-sim row going
+from 56% to 67% is that re-roll as much as anything. On 128 seeds a single rate is good to
+about ±8 points (95%), so read the history as "chest relics help a lot, the rest is noise"
+rather than to the point. (A measurement in between, commit 068659c, read 55% / 59% and 30%
+because of a bug that let the agent walk away from events that build their options at run
+time.)
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
 points of noise per row):

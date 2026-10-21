@@ -5,7 +5,7 @@ by evaluation score on validation seeds `EVAL000000–000063` and then measured 
 test seeds `EVAL001000+` (see `best.json`). It was trained before simulator patch 0006
 gave treasure chests their relic, and while the agent could still walk away from events
 (which the game does not allow); `best.json` → `results_patch0006` re-measures it with
-both fixed and all eight simulator patches. It is a starting point, not a finished agent:
+both fixed and all ten simulator patches. It is a starting point, not a finished agent:
 continue training from it with
 
 ```bash
