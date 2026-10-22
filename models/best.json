@@ -73,7 +73,7 @@
   }
  },
  "results_patch0006": {
-  "note": "simulator with patches 0001-0014 (chests give their relic, Silver Crucible empties only the first chest, the Lasting Candy fourth card is observed, a skipped rewards screen gives up what is on it, a rest site cannot be left before an option is taken, the Trial and Colorful Philosophers offer every card reward, screens opened from a rewards screen return to it, relics claimed off a rewards screen do what their pickup does, only the eight modelled potions can be drunk and they match their text); the agent never walks away from an event (the game has no such button; Welcome to Wongos' Leave is its own option). The checkpoint was trained before all of these.",
+  "note": "simulator with patches 0001-0015 (chests give their relic, Silver Crucible empties only the first chest, the Lasting Candy fourth card is observed, a skipped rewards screen gives up what is on it, a rest site cannot be left before an option is taken, the Trial and Colorful Philosophers offer every card reward, screens opened from a rewards screen return to it, relics claimed off a rewards screen do what their pickup does, only the eight modelled potions can be drunk and they match their text, Neow's Bones' screen settles its curse and keeps each reward); the agent never walks away from an event (the game has no such button; Welcome to Wongos' Leave is its own option). The checkpoint was trained before all of these.",
   "seeds": "EVAL001000-EVAL001127 (test split)",
   "heuristic_s48": {
    "runs": 128,
