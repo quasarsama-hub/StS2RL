@@ -1,9 +1,9 @@
-A: score 0.143  win 0.0% [0.0%,2.9%]  act1:25%  act2:0%  act3:0%  floor 14.6  (128 runs, 4.0s/run)
-B: score 0.195  win 0.0% [0.0%,2.9%]  act1:56%  act2:1%  act3:0%  floor 19.8  (128 runs, 5.8s/run)
+A: score 0.142  win 0.0% [0.0%,2.9%]  act1:24%  act2:0%  act3:0%  floor 14.5  (128 runs, 2.9s/run)
+B: score 0.195  win 0.0% [0.0%,2.9%]  act1:55%  act2:1%  act3:0%  floor 19.9  (128 runs, 3.6s/run)
 128 paired seeds   A = heuristic   B = models/best.pt
-  run score     A 0.143   B 0.195   B-A +0.0517 [+0.0365, +0.0669]   p(B>A) = 0.0000
-  floor reached B-A +5.27 [+3.72, +6.83]
-  Act 1 clears  A 32   B 72   (72 seeds differ; exact McNemar two-sided p = 0.0000)
+  run score     A 0.142   B 0.195   B-A +0.0530 [+0.0378, +0.0682]   p(B>A) = 0.0000
+  floor reached B-A +5.41 [+3.85, +6.96]
+  Act 1 clears  A 31   B 71   (68 seeds differ; exact McNemar two-sided p = 0.0000)
   wins          A 0   B 0   (two-sided p = 1.0000)
-  promotion gate (alpha 0.05): B WOULD BE PROMOTED -- score +0.0517 (p=0.0000), Act 1 clears 32->72
-wall time 325s on the test split
+  promotion gate (alpha 0.05): B WOULD BE PROMOTED -- score +0.0530 (p=0.0000), Act 1 clears 31->71
+wall time 214s on the test split

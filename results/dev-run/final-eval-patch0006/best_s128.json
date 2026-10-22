@@ -2,24 +2,24 @@
  "summary": {
   "runs": 128,
   "errors": 0,
-  "score": 0.2081801470588235,
+  "score": 0.2068780637254902,
   "win_rate": 0.0,
   "win_ci95": [
    0.0,
    0.02913799589810803
   ],
-  "mean_floor": 21.234375,
-  "seconds_per_run": 26.880661964804702,
+  "mean_floor": 21.1015625,
+  "seconds_per_run": 11.473024109773448,
   "act1_clear": 0.625,
-  "act2_clear": 0.0234375,
+  "act2_clear": 0.015625,
   "act3_clear": 0.0,
   "deaths": {
-   "slumbering-beetle": 13,
+   "slumbering-beetle": 14,
    "vantom": 12,
    "lagavulin-matriarch": 10,
    "spiny-toad": 9,
-   "bowlbugs": 6,
-   "obscura": 6,
+   "entomancer": 7,
+   "ceremonial-beast": 7,
    "hunter-killer": 6,
    "kin": 6
   }
@@ -604,12 +604,10 @@
   {
    "seed": "EVAL001014",
    "won": false,
-   "floor": 22,
-   "score": 0.21568627450980393,
-   "death": "bowlbugs",
+   "floor": 24,
+   "score": 0.23529411764705882,
+   "death": "entomancer",
    "deck": [
-    472,
-    472,
     472,
     472,
     472,
@@ -627,7 +625,9 @@
     272,
     465,
     20,
-    238
+    358,
+    526,
+    522
    ],
    "relics": [
     36,
@@ -2156,9 +2156,9 @@
   {
    "seed": "EVAL001055",
    "won": false,
-   "floor": 23,
-   "score": 0.22549019607843138,
-   "death": "obscura",
+   "floor": 17,
+   "score": 0.16666666666666666,
+   "death": "ceremonial-beast",
    "deck": [
     472,
     472,
@@ -2178,20 +2178,13 @@
     254,
     95,
     538,
-    265,
-    113,
-    87,
-    18,
-    273,
-    516,
-    247
+    265
    ],
    "relics": [
     36,
     54,
     10,
-    192,
-    71
+    192
    ]
   },
   {
@@ -3407,9 +3400,9 @@
   {
    "seed": "EVAL001089",
    "won": false,
-   "floor": 17,
-   "score": 0.16666666666666666,
-   "death": "waterfall-giant",
+   "floor": 19,
+   "score": 0.18627450980392157,
+   "death": "slumbering-beetle",
    "deck": [
     472,
     472,
@@ -3428,11 +3421,13 @@
     175,
     60,
     462,
-    175
+    175,
+    334
    ],
    "relics": [
     36,
-    240
+    240,
+    266
    ]
   },
   {
@@ -3690,7 +3685,7 @@
     240,
     13,
     268,
-    246,
+    364,
     466
    ],
    "relics": [
@@ -3888,7 +3883,7 @@
     374,
     334,
     61,
-    465,
+    150,
     263,
     60
    ],
@@ -4715,9 +4710,9 @@
   {
    "seed": "EVAL001122",
    "won": false,
-   "floor": 39,
-   "score": 0.38235294117647056,
-   "death": "fabricator",
+   "floor": 24,
+   "score": 0.23529411764705882,
+   "death": "chompers",
    "deck": [
     472,
     472,
@@ -4740,29 +4735,15 @@
     247,
     466,
     522,
-    66,
-    238,
-    519,
-    404,
-    358,
-    95,
-    303,
-    433,
-    46,
-    533,
-    519,
-    464,
-    508,
-    508
+    381,
+    268
    ],
    "relics": [
     36,
     240,
     43,
     107,
-    181,
-    288,
-    246
+    181
    ]
   },
   {
