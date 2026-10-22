@@ -1,0 +1,394 @@
+diff --git a/src/Sts2Emulator.Tests/RelicClaimFollowUpTests.cs b/src/Sts2Emulator.Tests/RelicClaimFollowUpTests.cs
+new file mode 100644
+index 0000000..f85bad0
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/RelicClaimFollowUpTests.cs
+@@ -0,0 +1,174 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// A relic claimed off a rewards screen does what its AfterObtained does however it was
++/// obtained, the screens it opens come back to the rewards screen -- and only those.
++/// </summary>
++public class RelicClaimFollowUpTests
++{
++    private static RunEngine Run(string seed = "NXV45HW43K")
++    {
++        var engine = new RunEngine();
++        engine.Reset(seed);
++        return engine;
++    }
++
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    private static int Relic(string name) => RunNonCombatEffects.NamedRelic(name);
++
++    private static void FinishSelection(RunEngine engine)
++    {
++        while (engine.State.Phase == RunPhase.TransformSelect)
++        {
++            Step(
++                engine,
++                Enumerable
++                    .Range(0, engine.State.Deck.Count)
++                    .First(i => RunNonCombatEffects.CanSelectCard(engine.State, i))
++            );
++        }
++    }
++
++    /// <summary>Neow's Bones' screen holding <paramref name="first" />, then <paramref name="second" />.</summary>
++    private static RunEngine Bones(int first, int second)
++    {
++        var engine = Run();
++        engine.State.Phase = RunPhase.Ancient;
++        engine.State.NeowOptions[0] = RunConstants.RelicNeowsBones;
++        Step(engine, 0);
++        engine.State.RelicReward = first;
++        engine.State.PendingBonusRelicRewards[0] = second;
++        return engine;
++    }
++
++    /// <summary>Small Capsule's relic goes ahead of the Bones' second, not instead of it.</summary>
++    [Fact]
++    public void SmallCapsuleOffNeowsBonesKeepsTheSecondRelic()
++    {
++        int second = Relic("Vajra");
++        var engine = Bones(Relic("SmallCapsule"), second);
++
++        Step(engine, 0);
++        Assert.NotEqual(0, engine.State.RelicReward);
++        Assert.NotEqual(second, engine.State.RelicReward);
++        Step(engine, 0);
++
++        Assert.Equal(second, engine.State.RelicReward);
++        Step(engine, 0);
++        Assert.False(engine.State.PendingNeowsBonesCurse);
++        Assert.Equal(RunPhase.Ancient, engine.State.Phase);
++    }
++
++    /// <summary>Scroll Boxes off the Bones' screen opens its bundle, then comes back.</summary>
++    [Fact]
++    public void ScrollBoxesOffNeowsBonesOpensItsBundle()
++    {
++        int second = Relic("Vajra");
++        var engine = Bones(Relic("ScrollBoxes"), second);
++        int deck = engine.State.Deck.Count;
++
++        Step(engine, 0);
++        Assert.Equal(RunPhase.BundleSelect, engine.State.Phase);
++        Step(engine, 0);
++        Step(engine, RunConstants.BundleConfirmAction);
++
++        Assert.Equal(RunPhase.RelicReward, engine.State.Phase);
++        Assert.Equal(second, engine.State.RelicReward);
++        Assert.True(engine.State.Deck.Count > deck);
++    }
++
++    /// <summary>Lost Coffer's card reward and potion, and Kaleidoscope's two rewards, join the screen.</summary>
++    [Fact]
++    public void LostCofferAndKaleidoscopeOffNeowsBonesOfferTheirRewards()
++    {
++        var coffer = Bones(Relic("LostCoffer"), Relic("Kaleidoscope"));
++
++        Step(coffer, 0);
++        Assert.True(coffer.State.RewardCardPending);
++        Assert.NotEqual(0, coffer.State.RewardPotion);
++
++        var kaleidoscope = Bones(Relic("Kaleidoscope"), Relic("Vajra"));
++        Step(kaleidoscope, 0);
++        Assert.Equal(2, kaleidoscope.State.PendingOtherCharacterCardRewards);
++    }
++
++    /// <summary>
++    /// Neow's Bones' curse lands once its screen is done, after a removal its last relic
++    /// opened -- it used to land first, and Precise Scissors could take it straight out.
++    /// </summary>
++    [Fact]
++    public void NeowsBonesCurseComesAfterTheLastRelicsRemoval()
++    {
++        var engine = Bones(Relic("Vajra"), Relic("PreciseScissors"));
++        Step(engine, 0);
++        Step(engine, 0);
++        Assert.Equal(RunPhase.TransformSelect, engine.State.Phase);
++        Assert.True(engine.State.PendingNeowsBonesCurse);
++
++        FinishSelection(engine);
++
++        Assert.False(engine.State.PendingNeowsBonesCurse);
++        Assert.Equal(RunPhase.Ancient, engine.State.Phase);
++    }
++
++    /// <summary>
++    /// Reward state that outlived its screen does not send a later selection to a rewards
++    /// screen: a shop removal goes back to the shop.
++    /// </summary>
++    [Fact]
++    public void AShopRemovalReturnsToTheShopWhateverRewardStateIsLeft()
++    {
++        var engine = Run();
++        engine.State.Gold = 999;
++        RunRewardGenerator.EnterShop(engine.State);
++        engine.State.RewardCardPending = true; // left over from somewhere
++
++        Step(engine, RunConstants.ShopRemoveAction);
++        FinishSelection(engine);
++
++        Assert.Equal(RunPhase.Shop, engine.State.Phase);
++    }
++
++    /// <summary>The Future of Potions' card reward is opened directly and leaves nothing pending.</summary>
++    [Fact]
++    public void TheFutureOfPotionsLeavesNoCardRewardPending()
++    {
++        var engine = Run();
++        RunRewardGenerator.EnterFutureOfPotionsReward(
++            engine.State,
++            GeneratedData.Potions.FindId("FirePotion")!.Value,
++            engine.State.PlayerRng.Rewards
++        );
++
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Assert.False(engine.State.RewardCardPending);
++    }
++
++    /// <summary>
++    /// A removal the Forbidden Grimoire owes, opened as an Act 1 boss's rewards screen is
++    /// left, goes on into Act 2. It used to end the run.
++    /// </summary>
++    [Fact]
++    public void AGrimoireRemovalAtTheAct1BossGoesOnToAct2()
++    {
++        var engine = Run();
++        engine.State.CurrentNodeType = RunConstants.NodeBoss;
++        engine.State.CardRemovalsOwed = 1;
++        engine.State.Phase = RunPhase.RelicReward;
++        int act = engine.State.Act;
++
++        Step(engine, RunConstants.RewardSkipAction);
++        Assert.Equal(RunPhase.TransformSelect, engine.State.Phase);
++        FinishSelection(engine);
++
++        Assert.NotEqual(RunPhase.Complete, engine.State.Phase);
++        Assert.NotEqual(act, engine.State.Act);
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 664e0b1..16742c5 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -1574,9 +1574,7 @@ public sealed class RunEngine
+             // for the player to claim, the same shape as Kaleidoscope. Handing the card
+             // reward straight over skipped the screen, and with it the claim the run
+             // really makes.
+-            RunRewardGenerator.PopulateCardReward(State);
+-            State.RewardCardPending = true;
+-            State.RewardPotion = RunRewardGenerator.NextPotion(State, State.PlayerRng.Rewards);
++            RunRewardGenerator.OfferRelicPickupRewards(State, relicId);
+             State.NeowAwaitingProceed = true;
+             State.Phase = RunPhase.RelicReward;
+             return;
+@@ -1635,7 +1633,7 @@ public sealed class RunEngine
+             // "Obtain 2 card rewards from other characters". RewardsCmd.OfferCustom puts
+             // both on the rewards screen at once; the player claims one, picks a card,
+             // lands back on the screen and claims the other.
+-            State.PendingOtherCharacterCardRewards = 2;
++            RunRewardGenerator.OfferRelicPickupRewards(State, relicId);
+             State.NeowAwaitingProceed = true;
+             State.Phase = RunPhase.RelicReward;
+             return;
+@@ -2091,6 +2089,7 @@ public sealed class RunEngine
+     private int LeaveRewardScreen(out bool terminal)
+     {
+         terminal = false;
++        State.ScreenOpenedFromRewards = false;
+         // Set with the elite's relic, which went straight onto this screen. Left set, the
+         // next card reward with no screen to return to (Dream Catcher's, the Trial's)
+         // opened a rewards screen with a freshly pulled relic on it.
+@@ -4722,13 +4721,24 @@ public sealed class RunEngine
+     /// </summary>
+     private bool ReturnToRewardScreen()
+     {
+-        if (!RunRewardGenerator.HasPendingRewards(State))
++        // Only a screen a rewards screen opened: reward state can outlive its screen, and
++        // reading it alone sent a later shop, rest or event selection to a rewards screen.
++        if (!State.ScreenOpenedFromRewards)
+         {
+             return false;
+         }
+ 
+-        State.Phase = RunPhase.RelicReward;
+-        return true;
++        State.ScreenOpenedFromRewards = false;
++        if (RunRewardGenerator.HasPendingRewards(State))
++        {
++            State.Phase = RunPhase.RelicReward;
++            return true;
++        }
++
++        // The screen is empty: settle what waited on all of it (Neow's Bones' curse), then
++        // go on the way an emptied screen does.
++        RunRewardGenerator.OfferNextBonusRelic(State);
++        return false;
+     }
+ 
+     /// <summary>Shuts the offer grid and runs whatever was waiting behind it.</summary>
+@@ -5109,7 +5119,10 @@ public sealed class RunEngine
+                     RunRewardGenerator.ContinueLordsParasolSweep(State);
+                     return 0;
+                 case SelectionReturn.Map:
+-                    return AdvanceAfterNode(out terminal);
++                    // Through the boss check: a removal the Forbidden Grimoire owes, opened as
++                    // a boss's rewards screen is left, went on to AdvanceAfterNode -- which
++                    // ends the run at a boss instead of entering the next act.
++                    return AdvanceAfterRelicReward(out terminal);
+                 case SelectionReturn.Rest:
+                     // The option was spent on the way in; whether the screen stays up is
+                     // the Tent's call, which is what FinishRestOption decides.
+diff --git a/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs b/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
+index 461a8c4..2794605 100644
+--- a/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
++++ b/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
+@@ -512,14 +512,18 @@ public static class RunNonCombatEffects
+                 // FOUR relics off the FRONT of the grab bag, offered on a screen the way
+                 // Small Capsule's one is. Each is marked WAX, and every third combat melts
+                 // one -- so this is four relics on loan, not four relics.
+-                state.PendingBonusRelicRewards.Clear();
++                // Ahead of whatever is already queued (another relic on the screen it was
++                // claimed from), not instead of it.
++                var waxRelics = new List<int>();
+                 for (int i = 0; i < RunConstants.ToyBoxRelics; i++)
+                 {
+                     int wax = RunRewardGenerator.NextRelic(state);
+-                    state.PendingBonusRelicRewards.Add(wax);
++                    waxRelics.Add(wax);
+                     state.WaxRelics.Add(wax);
+                 }
+ 
++                state.PendingBonusRelicRewards.InsertRange(0, waxRelics);
++
+                 RunRewardGenerator.OfferNextBonusRelic(state);
+                 return RunFollowUp.BonusRelicRewards;
+             case RunConstants.RelicSmallCapsule:
+@@ -528,8 +532,9 @@ public static class RunNonCombatEffects
+                 // outright also ran its pickup effect a step early, so a capture
+                 // (`P14DQ9GNPW`) is on `rewards` holding two relics where the emulator
+                 // was back on the ancient holding three.
+-                state.PendingBonusRelicRewards.Clear();
+-                state.PendingBonusRelicRewards.Add(RunRewardGenerator.NextRelic(state));
++                // Ahead of whatever is already queued: claimed off Neow's Bones' screen,
++                // clearing the queue threw away the Bones' second relic.
++                state.PendingBonusRelicRewards.Insert(0, RunRewardGenerator.NextRelic(state));
+                 RunRewardGenerator.OfferNextBonusRelic(state);
+                 return RunFollowUp.BonusRelicRewards;
+             case RunConstants.RelicLargeCapsule:
+diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+index 6a02478..adc680e 100644
+--- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+@@ -493,7 +493,33 @@ public static class RunRewardGenerator
+                 // which runs its AfterObtained -- a live capture's Silken Tress zeroed the
+                 // player's gold the moment it was taken. Adding it to the list and
+                 // stopping there is what this used to do.
+-                RunNonCombatEffects.ApplyRelicPickup(state, claimed);
++                var screen = state.Phase;
++                var followUp = RunNonCombatEffects.ApplyRelicPickup(state, claimed);
++                // What its AfterObtained offers lands here however the relic was obtained:
++                // Lost Coffer's and Kaleidoscope's rewards join this screen, and Scroll
++                // Boxes' bundle opens over it.
++                OfferRelicPickupRewards(state, claimed);
++                if (followUp == RunFollowUp.BundleSelect)
++                {
++                    state.Phase = RunPhase.BundleSelect;
++                }
++
++                if (state.Phase != screen)
++                {
++                    // The relic opened a screen of its own over this one. Closing it comes
++                    // back here; only the next queued relic moves up meanwhile, and what
++                    // waits on the whole screen -- Neow's Bones' curse -- waits until then
++                    // (it used to land first, where Precise Scissors could remove it).
++                    state.ScreenOpenedFromRewards = true;
++                    if (state.RelicReward == 0 && state.PendingBonusRelicRewards.Count > 0)
++                    {
++                        state.RelicReward = state.PendingBonusRelicRewards[0];
++                        state.PendingBonusRelicRewards.RemoveAt(0);
++                    }
++
++                    return true;
++                }
++
+                 OfferNextBonusRelic(state);
+                 return true;
+             }
+@@ -544,6 +570,26 @@ public static class RunRewardGenerator
+         return false;
+     }
+ 
++    /// <summary>
++    /// The rewards a relic's AfterObtained puts on a rewards screen: Lost Coffer's card
++    /// reward and potion, Kaleidoscope's two other-character card rewards. Built here so a
++    /// relic claimed off Neow's Bones' screen offers them too, not only one taken from
++    /// Neow directly.
++    /// </summary>
++    public static void OfferRelicPickupRewards(RunState state, int relicId)
++    {
++        if (relicId == RunConstants.RelicLostCoffer)
++        {
++            PopulateCardReward(state);
++            state.RewardCardPending = true;
++            state.RewardPotion = NextPotion(state, state.PlayerRng.Rewards);
++        }
++        else if (relicId == RunConstants.RelicKaleidoscope)
++        {
++            state.PendingOtherCharacterCardRewards += 2;
++        }
++    }
++
+     public static void ClearRewardScreen(RunState state)
+     {
+         state.RewardGold = 0;
+@@ -1855,7 +1901,8 @@ public static class RunRewardGenerator
+         state.RewardPotion = 0;
+         state.RelicReward = 0;
+         state.PendingPotionRewards.Clear();
+-        state.RewardCardPending = true;
++        // A card reward opened directly, not one on a rewards screen: flagging it pending
++        // left the flag set after it was answered (as patch 0010 found for the Trial).
+         state.Phase = RunPhase.CardReward;
+     }
+ 
+diff --git a/src/Sts2Emulator/Core/Run/RunState.cs b/src/Sts2Emulator/Core/Run/RunState.cs
+index 82601dc..ce0ed81 100644
+--- a/src/Sts2Emulator/Core/Run/RunState.cs
++++ b/src/Sts2Emulator/Core/Run/RunState.cs
+@@ -158,6 +158,12 @@ public sealed class RunState
+     /// <summary>Silver Crucible has emptied its one chest (it empties only the first).</summary>
+     public bool SilverCrucibleChestEmptied;
+ 
++    /// <summary>
++    /// A relic claimed off a rewards screen opened a screen of its own over it (a deck
++    /// selection, an offer grid, a bundle); closing that screen goes back to the rewards.
++    /// </summary>
++    public bool ScreenOpenedFromRewards;
++
+     /// <summary>
+     /// Potion rewards still owed. The reward screen carries one potion at a time, so
+     /// anything that offers several -- Tiny Mailbox's two, the Potion Courier's three
+diff --git a/src/Sts2Emulator/Core/StateCloning.cs b/src/Sts2Emulator/Core/StateCloning.cs
+index 53724f3..241c71e 100644
+--- a/src/Sts2Emulator/Core/StateCloning.cs
++++ b/src/Sts2Emulator/Core/StateCloning.cs
+@@ -449,6 +449,7 @@ public static class StateCloning
+             PendingRestUpgrade = state.PendingRestUpgrade,
+             RestResultPending = state.RestResultPending,
+             SilverCrucibleChestEmptied = state.SilverCrucibleChestEmptied,
++            ScreenOpenedFromRewards = state.ScreenOpenedFromRewards,
+             UnknownMapPointsVisited = state.UnknownMapPointsVisited,
+             UnknownMapPointMonsterOdds = state.UnknownMapPointMonsterOdds,
+             UnknownMapPointEliteOdds = state.UnknownMapPointEliteOdds,

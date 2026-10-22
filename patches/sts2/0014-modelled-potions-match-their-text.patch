@@ -1,0 +1,88 @@
+diff --git a/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs b/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs
+index 3ea1047..17622e1 100644
+--- a/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs
++++ b/src/Sts2Emulator.Tests/Powers/PotionModelledTests.cs
+@@ -47,6 +47,45 @@ public class PotionModelledTests
+         Assert.Equal(Id("FairyInABottle"), fight.State.PotionSlots[0]);
+     }
+ 
++    /// <summary>"Draw 1 card. At the start of your next 3 turns, draw 1 additional card."</summary>
++    [Fact]
++    public void ClarityExtractDrawsOneNow()
++    {
++        var fight = WithPotion(Id("Clarity")).Draw(new CardInstance(472, false), new CardInstance(472, false), new CardInstance(472, false));
++        int hand = fight.State.Hand.Count;
++
++        fight.Potion(0);
++
++        Assert.Equal(hand + 1, fight.State.Hand.Count);
++        Assert.Equal(3, fight.PlayerBuffAmount(BuffId.Clarity));
++    }
++
++    /// <summary>"Gain [E]. Gain an additional [E] at the start of your next 3 turns."</summary>
++    [Fact]
++    public void RadiantTinctureGivesOneEnergyNow()
++    {
++        var fight = WithPotion(Id("RadiantTincture"));
++        int energy = fight.State.Energy;
++
++        fight.Potion(0);
++
++        Assert.Equal(energy + 1, fight.State.Energy);
++        Assert.Equal(3, fight.PlayerBuffAmount(BuffId.Radiance));
++    }
++
++    /// <summary>"Gain 12 Block": unpowered, so Frail and Dexterity leave it alone.</summary>
++    [Fact]
++    public void BlockPotionIsAFlatTwelve()
++    {
++        var fight = WithPotion(Id("BlockPotion"));
++        BuffSystem.Apply(fight.State.PlayerBuffs, BuffId.Frail, 2);
++        BuffSystem.Apply(fight.State.PlayerBuffs, BuffId.Dexterity, 2);
++
++        fight.Potion(0);
++
++        Assert.Equal(12, fight.State.PlayerBlock);
++    }
++
+     /// <summary>An unmodelled potion forced through stays in its slot.</summary>
+     [Fact]
+     public void AnUnmodelledPotionIsNotUsedUp()
+diff --git a/src/Sts2Emulator/Core/Effects/PotionEffects.cs b/src/Sts2Emulator/Core/Effects/PotionEffects.cs
+index f30131b..44ff7b5 100644
+--- a/src/Sts2Emulator/Core/Effects/PotionEffects.cs
++++ b/src/Sts2Emulator/Core/Effects/PotionEffects.cs
+@@ -34,9 +34,19 @@ public static class PotionEffects
+         switch (potionId)
+         {
+             case 5: // Block Potion: gain 12 unpowered Block.
+-                CardEffects.GainBlock(state, 12, rng);
++                // Unpowered, as the comment always said: the powered path let Frail,
++                // Dexterity, No Block, Vambrace and Pael's Legion change a flat "Gain 12
++                // Block", hooks the game reserves for card and monster-move block.
++                CardEffects.GainUnpoweredBlock(state, 12, rng);
+                 break;
+-            case 9: // Clarity: draw an extra card at the start of each of the next 3 turns.
++            case 9: // Clarity Extract: draw 1 now, and 1 more at the start of each of the next 3 turns.
++                // "Draw 1 card. At the start of your next 3 turns, draw 1 additional card."
++                // The draw now was missing.
++                if (rng is not null)
++                {
++                    CardEffects.DrawCards(state, 1, rng);
++                }
++
+                 BuffSystem.Apply(state.PlayerBuffs, BuffId.Clarity, ClarityTurns);
+                 break;
+             case 17: // Duplicator: play the next card an extra time.
+@@ -59,7 +69,10 @@ public static class PotionEffects
+                 }
+ 
+                 break;
+-            case 49: // Radiant Tincture: +1 energy for each of the next 3 turns.
++            case 49: // Radiant Tincture: +1 energy now, and +1 at the start of each of the next 3 turns.
++                // "Gain [E]. Gain an additional [E] at the start of your next 3 turns." The
++                // energy now was missing.
++                CardEffects.GainEnergy(state, 1);
+                 BuffSystem.Apply(state.PlayerBuffs, BuffId.Radiance, RadianceTurns);
+                 break;
+             case 50: // Regen Potion: heal 5 at turn end, winding down by one a turn.
