@@ -1,0 +1,324 @@
+diff --git a/src/Sts2Emulator.Tests/NeowsBonesRewardTests.cs b/src/Sts2Emulator.Tests/NeowsBonesRewardTests.cs
+new file mode 100644
+index 0000000..dcafa28
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/NeowsBonesRewardTests.cs
+@@ -0,0 +1,107 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Neow's Bones' screen holding relics whose pickups put rewards of their own on it (Lost
++/// Coffer, Kaleidoscope) or open a screen over it (Precise Scissors, Arcane Scroll's draw).
++/// </summary>
++public class NeowsBonesRewardTests
++{
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    private static int Relic(string name) => RunNonCombatEffects.NamedRelic(name);
++
++    private static RunEngine Bones(int first, int second)
++    {
++        var engine = new RunEngine();
++        engine.Reset("NXV45HW43K");
++        engine.State.Phase = RunPhase.Ancient;
++        engine.State.NeowOptions[0] = RunConstants.RelicNeowsBones;
++        Step(engine, 0);
++        engine.State.RelicReward = first;
++        engine.State.PendingBonusRelicRewards[0] = second;
++        return engine;
++    }
++
++    private static void FinishSelection(RunEngine engine)
++    {
++        while (engine.State.Phase == RunPhase.TransformSelect)
++        {
++            Step(
++                engine,
++                Enumerable
++                    .Range(0, engine.State.Deck.Count)
++                    .First(i => RunNonCombatEffects.CanSelectCard(engine.State, i))
++            );
++        }
++    }
++
++    /// <summary>
++    /// Lost Coffer then Precise Scissors: the removal comes back to a screen still holding
++    /// the Coffer's potion and card reward, and the curse lands once those are answered
++    /// too. It used to stay pending until some later relic claim.
++    /// </summary>
++    [Fact]
++    public void TheCurseLandsWhenTheScreenEmptiesThroughACardReward()
++    {
++        var engine = Bones(Relic("LostCoffer"), Relic("PreciseScissors"));
++        Step(engine, 0); // Lost Coffer: potion, Scissors, card reward on the screen
++        Step(engine, 1); // Precise Scissors
++        FinishSelection(engine);
++        Assert.Equal(RunPhase.RelicReward, engine.State.Phase);
++
++        Step(engine, 0); // the potion
++        Step(engine, 0); // the card reward
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Step(engine, 0);
++
++        Assert.Equal(RunPhase.Ancient, engine.State.Phase);
++        Assert.False(engine.State.PendingNeowsBonesCurse);
++    }
++
++    /// <summary>
++    /// Lost Coffer then Kaleidoscope, a Kaleidoscope reward answered first: the Coffer's
++    /// cards are still the Coffer's when its reward is claimed (they were wiped to 0, 0, 0).
++    /// </summary>
++    [Fact]
++    public void AnOtherCharacterRewardDoesNotWipeTheScreensCardReward()
++    {
++        var engine = Bones(Relic("LostCoffer"), Relic("Kaleidoscope"));
++        Step(engine, 0); // Lost Coffer
++        int[] coffer = [.. engine.State.RewardCards];
++        Step(engine, 1); // Kaleidoscope: potion, card reward, two other-character rewards
++
++        Step(engine, 2); // an other-character reward first
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Step(engine, RunConstants.RewardSkipAction);
++        Step(engine, 1); // the Coffer's card reward
++
++        Assert.Equal(RunPhase.CardReward, engine.State.Phase);
++        Assert.Equal(coffer, engine.State.RewardCards);
++    }
++
++    /// <summary>
++    /// Kaleidoscope rolls both of its rewards as it is obtained, so a relic claimed in
++    /// between (Arcane Scroll's card) cannot change them.
++    /// </summary>
++    [Fact]
++    public void KaleidoscopesCardsDoNotDependOnClaimOrder()
++    {
++        var first = Bones(Relic("Kaleidoscope"), Relic("ArcaneScroll"));
++        Step(first, 0);
++        Step(first, 1); // an other-character reward straight away
++        int[] straight = [.. first.State.RewardCards];
++
++        var later = Bones(Relic("Kaleidoscope"), Relic("ArcaneScroll"));
++        Step(later, 0);
++        Step(later, 0); // Arcane Scroll first
++        Step(later, 0); // then the other-character reward
++
++        Assert.Equal(straight, later.State.RewardCards);
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 16742c5..39222a6 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -1920,7 +1920,7 @@ public sealed class RunEngine
+             State.ReturnToRewardScreenAfterCardReward = false;
+             if (State.NeowAwaitingProceed && !RunRewardGenerator.HasPendingRewards(State))
+             {
+-                State.Phase = RunPhase.Ancient;
++                ReturnToNeow();
+                 return 0;
+             }
+ 
+@@ -2049,7 +2049,7 @@ public sealed class RunEngine
+             && !RunRewardGenerator.HasPendingRewards(State)
+         )
+         {
+-            State.Phase = RunPhase.Ancient;
++            ReturnToNeow();
+         }
+         else if (
+             State.Phase == RunPhase.RelicReward
+@@ -2122,7 +2122,7 @@ public sealed class RunEngine
+ 
+         if (State.NeowAwaitingProceed)
+         {
+-            State.Phase = RunPhase.Ancient;
++            ReturnToNeow();
+             return 0;
+         }
+ 
+@@ -4719,6 +4719,17 @@ public sealed class RunEngine
+     /// the map, Neow or the event instead, and everything left on the screen was lost --
+     /// Neow's Bones' second relic, and with it the curse, among them.
+     /// </summary>
++    /// <summary>
++    /// Back to Neow for its Proceed, with Neow's Bones' curse settled: it waits on the whole
++    /// rewards screen, and a screen emptied through a card reward, a potion or a leave
++    /// otherwise left it pending until some later relic claim added it.
++    /// </summary>
++    private void ReturnToNeow()
++    {
++        RunNonCombatEffects.AddNeowsBonesCurse(State);
++        State.Phase = RunPhase.Ancient;
++    }
++
+     private bool ReturnToRewardScreen()
+     {
+         // Only a screen a rewards screen opened: reward state can outlive its screen, and
+@@ -4769,7 +4780,7 @@ public sealed class RunEngine
+         // EVENT opened returns to the event's finished page.
+         if (State.NeowAwaitingProceed)
+         {
+-            State.Phase = RunPhase.Ancient;
++            ReturnToNeow();
+             return 0;
+         }
+ 
+@@ -5031,7 +5042,7 @@ public sealed class RunEngine
+         // A screen Neow opened returns to Neow, which stays up for one more Proceed.
+         if (State.NeowAwaitingProceed)
+         {
+-            State.Phase = RunPhase.Ancient;
++            ReturnToNeow();
+             return 0;
+         }
+ 
+@@ -5101,7 +5112,7 @@ public sealed class RunEngine
+             // sends a combat's reward screen back to the ancient floors later.
+             if (State.NeowAwaitingProceed)
+             {
+-                State.Phase = RunPhase.Ancient;
++                ReturnToNeow();
+                 return 0;
+             }
+ 
+diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+index adc680e..13af6cd 100644
+--- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+@@ -375,7 +375,21 @@ public static class RunRewardGenerator
+         state.Phase = RunPhase.CardReward;
+         Array.Clear(state.RewardCards);
+         Array.Clear(state.RewardUpgraded);
++        if (state.OtherCharacterOffers.Count > 0)
++        {
++            state.OtherCharacterOffers[0].CopyTo(state.RewardCards, 0);
++            state.OtherCharacterOffersUpgraded[0].CopyTo(state.RewardUpgraded, 0);
++            state.OtherCharacterOffers.RemoveAt(0);
++            state.OtherCharacterOffersUpgraded.RemoveAt(0);
++            return;
++        }
++
++        RollOtherCharacterOffer(state);
++    }
+ 
++    /// <summary>Rolls one of Kaleidoscope's offers into the reward arrays.</summary>
++    private static void RollOtherCharacterOffer(RunState state)
++    {
+         var pools = OtherCharacterPools(state);
+         state.Rng.Niche.Shuffle(pools);
+ 
+@@ -528,6 +542,14 @@ public static class RunRewardGenerator
+ 
+         if (state.RewardCardPending && itemIndex == 0)
+         {
++            if (state.HeldRewardCards.Length > 0)
++            {
++                state.HeldRewardCards.CopyTo(state.RewardCards, 0);
++                state.HeldRewardUpgraded.CopyTo(state.RewardUpgraded, 0);
++                state.HeldRewardCards = [];
++                state.HeldRewardUpgraded = [];
++            }
++
+             state.RewardCardPending = false;
+             state.ReturnToRewardScreenAfterCardReward = true;
+             state.Phase = RunPhase.CardReward;
+@@ -563,6 +585,13 @@ public static class RunRewardGenerator
+         {
+             state.PendingOtherCharacterCardRewards--;
+             state.ReturnToRewardScreenAfterCardReward = true;
++            if (state.RewardCardPending && state.HeldRewardCards.Length == 0)
++            {
++                // The screen's own card reward shares the arrays: put it aside for its claim.
++                state.HeldRewardCards = (int[])state.RewardCards.Clone();
++                state.HeldRewardUpgraded = (bool[])state.RewardUpgraded.Clone();
++            }
++
+             EnterOtherCharacterCardReward(state);
+             return true;
+         }
+@@ -586,6 +615,21 @@ public static class RunRewardGenerator
+         }
+         else if (relicId == RunConstants.RelicKaleidoscope)
+         {
++            // Both offers now, in order; the reward arrays are borrowed for the roll and
++            // put back, since the screen may hold a card reward of its own.
++            var cards = (int[])state.RewardCards.Clone();
++            var upgraded = (bool[])state.RewardUpgraded.Clone();
++            for (int i = 0; i < 2; i++)
++            {
++                Array.Clear(state.RewardCards);
++                Array.Clear(state.RewardUpgraded);
++                RollOtherCharacterOffer(state);
++                state.OtherCharacterOffers.Add((int[])state.RewardCards.Clone());
++                state.OtherCharacterOffersUpgraded.Add((bool[])state.RewardUpgraded.Clone());
++            }
++
++            cards.CopyTo(state.RewardCards, 0);
++            upgraded.CopyTo(state.RewardUpgraded, 0);
+             state.PendingOtherCharacterCardRewards += 2;
+         }
+     }
+@@ -599,6 +643,8 @@ public static class RunRewardGenerator
+         state.RelicReward = 0;
+         state.PendingGoldRewards.Clear();
+         state.PendingCardOffers.Clear();
++        state.HeldRewardCards = [];
++        state.HeldRewardUpgraded = [];
+         // Lasting Candy's option belongs to the card reward it was rolled for.
+         state.LastingCandyRewardCard = 0;
+         state.LastingCandyRewardUpgraded = false;
+diff --git a/src/Sts2Emulator/Core/Run/RunState.cs b/src/Sts2Emulator/Core/Run/RunState.cs
+index ce0ed81..abed7de 100644
+--- a/src/Sts2Emulator/Core/Run/RunState.cs
++++ b/src/Sts2Emulator/Core/Run/RunState.cs
+@@ -284,6 +284,26 @@ public sealed class RunState
+     /// </summary>
+     public int PendingOtherCharacterCardRewards;
+ 
++    /// <summary>
++    /// Kaleidoscope's two offers, rolled as it is obtained (its AfterObtained builds both
++    /// rewards before offering them) and handed out as each is claimed. Rolled at the
++    /// claim instead, anything drawn in between -- another relic claimed off Neow's
++    /// Bones' screen first -- changed the cards.
++    /// </summary>
++    public List<int[]> OtherCharacterOffers = [];
++
++    /// <summary>The upgrade rolls of <see cref="OtherCharacterOffers" />.</summary>
++    public List<bool[]> OtherCharacterOffersUpgraded = [];
++
++    /// <summary>
++    /// The screen's own card reward, put aside while an other-character reward borrows
++    /// the reward arrays (Lost Coffer's and Kaleidoscope's, both off Neow's Bones).
++    /// </summary>
++    public int[] HeldRewardCards = [];
++
++    /// <summary>The upgrade flags of <see cref="HeldRewardCards" />.</summary>
++    public bool[] HeldRewardUpgraded = [];
++
+     /// <summary>
+     /// Neow is still on screen with nothing left but "Proceed". The game returns to the
+     /// ancient after its rewards are answered and waits for one more input before the
+diff --git a/src/Sts2Emulator/Core/StateCloning.cs b/src/Sts2Emulator/Core/StateCloning.cs
+index 241c71e..b3a4d50 100644
+--- a/src/Sts2Emulator/Core/StateCloning.cs
++++ b/src/Sts2Emulator/Core/StateCloning.cs
+@@ -436,6 +436,13 @@ public static class StateCloning
+             PendingSelectionEventEntry = state.PendingSelectionEventEntry,
+             PendingGoldRewards = [.. state.PendingGoldRewards],
+             PendingCardOffers = [.. state.PendingCardOffers.Select(offer => (int[])offer.Clone())],
++            OtherCharacterOffers = [.. state.OtherCharacterOffers.Select(offer => (int[])offer.Clone())],
++            OtherCharacterOffersUpgraded =
++            [
++                .. state.OtherCharacterOffersUpgraded.Select(flags => (bool[])flags.Clone()),
++            ],
++            HeldRewardCards = (int[])state.HeldRewardCards.Clone(),
++            HeldRewardUpgraded = (bool[])state.HeldRewardUpgraded.Clone(),
+             PendingSelectionFollowUpCard = state.PendingSelectionFollowUpCard,
+             PendingSelectionFollowUpCount = state.PendingSelectionFollowUpCount,
+             PendingSelectionFollowUpHpLoss = state.PendingSelectionFollowUpHpLoss,

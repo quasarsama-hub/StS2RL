@@ -50,7 +50,7 @@ and play worse than the heuristic it was supposed to improve on.)
 **The simulator** is [evangambit/sts2](https://github.com/evangambit/sts2) (MIT), a C#
 re-implementation of StS2 v0.107.1 checked against the live game (4,800 tests, per-card live
 captures, exact RNG, exact map generation). It's pinned as a git submodule; this repo
-carries fourteen patches for it (`patches/sts2/`):
+carries fifteen patches for it (`patches/sts2/`):
 
 | patch | what it does |
 |---|---|
@@ -68,9 +68,12 @@ carries fourteen patches for it (`patches/sts2/`):
 | `0012-only-modelled-potions-can-be-drunk` | **55 of the 63 potions have no effect in the simulator yet** (it says so: "populated incrementally as potions are reverse-engineered"), but every one could be drunk — as a no-op that only emptied the slot, which the game never does. The trained agent drank them 546 times on the 128 test seeds, and on the real engine every such potion would end the run as a desync. Now only the eight modelled ones (Block, Clarity, Duplicator, Gigantification, Powdered Demise, Radiant Tincture, Regen, Shackling) can be drunk; the agent holds the rest. Fairy in a Bottle is never drunk by hand (it is Automatic) and keeps its revive. |
 | `0013-relics-claimed-off-a-rewards-screen` | 0011 decided "back to the rewards screen" from leftover reward state, which can outlive its screen (The Future of Potions left a card reward flagged), so a later shop removal or event selection could land on a phantom rewards screen; now only a screen a rewards screen opened goes back to it. A relic claimed off a rewards screen also does what its pickup does however it was obtained: Small Capsule and Toy Box queue their relics ahead of the screen's others instead of wiping them (Neow's Bones' second relic), Scroll Boxes opens its bundle, Lost Coffer and Kaleidoscope add their rewards, and Neow's Bones' curse lands after a removal its relic opened (Precise Scissors could remove it). And a removal the Forbidden Grimoire owes after a boss no longer ends the run at that boss. |
 | `0014-modelled-potions-match-their-text` | Three of the eight drinkable potions were incomplete: Clarity Extract now also draws its card at once, Radiant Tincture gives its energy at once, and Block Potion's 12 Block is unpowered (Frail, Dexterity and Vambrace changed it). |
+| `0015-neows-bones-screen-rewards` | Loose ends of 0013 on Neow's Bones' screen: the curse is settled whenever the run goes back to Neow (a screen emptied through Lost Coffer's card reward or potion left it pending until a later relic), an other-character reward claimed first no longer wipes Lost Coffer's cards, and Kaleidoscope rolls both of its rewards as it is obtained, as the game does, so a relic claimed in between cannot change them. |
 
-The simulator's own test suite passes with all fourteen patches applied (4,837 tests, including
-regression tests patches 5–14 add).
+The simulator's own test suite passes with all fifteen patches applied (4,840 tests, including
+regression tests patches 5–15 add). Of its 32 replays of recorded real runs, one
+(`XTLVVPKFBF-a8-heftytablet`) parts from the game at step 147 (a Crimson Mantle power); it
+does so with the first seven patches alone too.
 
 ## Results so far
 
@@ -79,7 +82,7 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with all fourteen simulator patches, and with the agent unable to walk away from an event (a
+with all fifteen simulator patches, and with the agent unable to walk away from an event (a
 move the simulator allows and the game does not; see the sts2-cli section)
 (`results/dev-run/final-eval-patch0006/`):
 
