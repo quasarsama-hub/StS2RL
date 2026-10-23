@@ -34,6 +34,7 @@ from pathlib import Path
 
 from .. import paths, sim
 from .. import gamedata as gd
+from . import cli
 from ..agent import Agent, AgentConfig
 
 sys.path.insert(0, str(paths.SIM_ROOT / "scripts"))
@@ -172,6 +173,10 @@ class NoMapping(Exception):
     pass
 
 
+class Diverged(Exception):
+    """The game and the simulator disagree on what this screen offers."""
+
+
 def combat_payload(action: int, target: int, view: sim.Run, state: dict) -> list[dict]:
     hand = view.hand()
     player = state.get("player") or {}
@@ -268,20 +273,57 @@ def event_payload(action: int, state: dict) -> list[dict]:
     raise NoMapping(f"event option {action} not available")
 
 
-def card_select_payload(actions: list[int], view: sim.Run, state: dict) -> list[dict]:
-    """Deck selections: the game lists the eligible cards in deck order; the simulator's
-    actions are deck indices masked to the same set, so position k means the same card."""
+def card_select_payload(agent: Agent, view: sim.Run, state: dict) -> list[dict]:
+    """The agent's picks on a card_select screen, as the game's `select_card` indices.
+
+    The game lists the cards it offers (eligible deck cards in deck order, or the cards on
+    offer) and keeps those numbers until the selection is confirmed. The simulator takes
+    one pick at a time and its deck -- or its offer -- changes with each: a removal shifts
+    every later card up one, a transform appends the replacement. So each pick is made on
+    a copy and followed back to its position on the game's list, the same bookkeeping as
+    the headless bench (`cli._card_select`). A pick that is not a card -- finishing early,
+    or skipping a choose-a-card -- ends the selection.
+    """
     card_select = state.get("card_select") or {}
-    legal = [int(a) for a in view.legal()]
-    if card_select.get("screen_type") == "choose":
-        return [{"action": "select_card", "index": legal.index(actions[0]) if actions[0] in legal else actions[0]}]
-    out = []
-    for a in actions:
-        if a not in legal:
-            raise NoMapping(f"deck index {a} is not selectable")
-        out.append({"action": "select_card", "index": legal.index(a)})
-    out.append({"action": "confirm_selection"})
-    return out
+    game_cards = [(cli.card_id(c.get("id", "")), bool(c.get("is_upgraded"))) for c in card_select.get("cards") or []]
+    choose = card_select.get("screen_type") == "choose"
+    offered = cli.selection_options(view)
+    listed = [card for _, card in sorted(offered.items())]
+    if len(listed) != len(game_cards) or not all(cli.same_card(a, b) for a, b in zip(listed, game_cards)):
+        raise Diverged(
+            f"card selection: game offers {[gd.card_name(c) for c, _ in game_cards]}, "
+            f"simulator offers {[gd.card_name(c) if c else '?' for c, _ in listed]}"
+        )
+    where = {pos: a for pos, (a, _) in enumerate(sorted(offered.items()))}  # game position -> sim action
+    deck_mode = not cli.offer_cards(view)
+    out: list[dict] = []
+    with view.clone(resample=False) as probe:
+        signature = (probe.phase, tuple(probe.state_list(20, 3)))
+        for _ in range(cli.MAX_PICKS):
+            before = cli.selection_options(probe)
+            legal = [int(a) for a in probe.legal()]
+            allowed = [a for a in legal if a in where.values()] + [a for a in legal if a not in before]
+            action, _ = agent.act(probe, allowed=allowed)
+            position = next((pos for pos, a in where.items() if a == action), None)
+            if action not in before or position is None:
+                break  # done, or skip
+            out.append({"action": "select_card", "index": position})
+            del where[position]
+            deck_before = cli.deck_columns(probe) if deck_mode else None
+            if not probe.step(action) or choose:
+                break
+            if (probe.phase, tuple(probe.state_list(20, 3))) != signature:
+                break  # the selection closed itself: every pick made
+            if deck_mode:
+                moved = cli.follow_deck(deck_before, cli.deck_columns(probe), action)
+                if moved is None:
+                    raise Diverged("card selection: the simulator changed the deck in a way the bridge cannot follow")
+                where = {pos: moved[a] for pos, a in where.items()}
+            elif len(cli.selection_options(probe)) == len(before) - 1:
+                where = {pos: a - (a > action) for pos, a in where.items()}
+    if choose:
+        return out or [{"action": "cancel_selection"}]
+    return out + [{"action": "confirm_selection"}]
 
 
 # --------------------------------------------------------------------------------------
@@ -367,6 +409,8 @@ class Session:
                     raise NoMapping("game is in combat, simulator is not")
                 action, target = self.agent.act(view)
                 return combat_payload(action, target, view, state)
+            if st == "card_select":
+                return card_select_payload(self.agent, view, state)
             action, _ = self.agent.act(view)
             if st == "map":
                 return map_payload(action, view, state)
@@ -378,20 +422,13 @@ class Session:
                 return shop_payload(action, view, state, self.shadow.info)
             if st == "event":
                 return event_payload(action, state)
-            if st == "card_select":
-                picks = [action]
-                # Multi-card screens: keep choosing on a copy until the simulator leaves.
-                with view.clone(resample=False) as probe:
-                    probe.step(action)
-                    while probe.phase == view.phase and len(picks) < 8 and len(probe.legal()):
-                        nxt, _ = self.agent.act(probe)
-                        picks.append(nxt)
-                        probe.step(nxt)
-                return card_select_payload(picks, view, state)
             if st == "bundle_select":
                 return [{"action": "select_bundle", "index": action}, {"action": "confirm_bundle_selection"}]
             fallback = trg.choose_action(state, 0)
             return [fallback] if fallback else []
+        except Diverged as exc:
+            self._desync(str(exc), state)
+            return []
         except NoMapping as exc:
             self.log(event="no_mapping", state_type=st, reason=str(exc))
             print(f"  ! could not express the agent's move on this screen ({exc}); using scripted play")
@@ -424,6 +461,8 @@ class Session:
             if trg.is_terminal_state(state):
                 break
             payloads = self.decide(state)
+            if self.desynced and self.strict:
+                break
             if not payloads:
                 print(f"  ! nothing to do on screen {state.get('state_type')!r}; waiting")
                 time.sleep(1.0)
@@ -431,7 +470,17 @@ class Session:
                 continue
             for payload in payloads:
                 before_state = state
-                result, state = self.post(payload, state)
+                try:
+                    result, state = self.post(payload, state)
+                except RuntimeError as exc:
+                    # The game refused a command the simulator thought legal: a divergence,
+                    # logged with the screen it happened on rather than a crash.
+                    self.log(step=step, payload=payload, state_type=state.get("state_type"), refused=str(exc), raw_state=state)
+                    self.desynced = False
+                    self._desync(str(exc), state)
+                    if self.strict:
+                        return state
+                    continue
                 if not self.desynced:
                     try:
                         self.shadow.apply(payload, before_state)

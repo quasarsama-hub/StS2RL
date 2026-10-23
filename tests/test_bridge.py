@@ -172,3 +172,44 @@ def test_chest_relic_matches_in_runs_with_debug_buffs(name):
             assert next(i["id"] for i in items if i["type"] == "relic") == live.relic_id(offered[0]["id"])
             checked += 1
     assert checked == 1
+
+
+def _selection_screen(run) -> dict:
+    """The mod's card_select screen for the simulator's open deck selection."""
+    from sts2rl.bridge import cli
+
+    offered = cli.selection_options(run)
+    cards = [{"index": i, "id": "CARD." + cli.card_entry(c), "is_upgraded": bool(u)} for i, (_, (c, u)) in enumerate(sorted(offered.items()))]
+    return {"state_type": "card_select", "card_select": {"screen_type": "select", "cards": cards}}
+
+
+def test_a_multi_card_deck_selection_names_each_card_by_its_place_on_the_games_list():
+    # Neow's "remove two cards" on EVAL000003: after the first Strike goes, the second
+    # Strike is deck index 0 again in the simulator, but still position 1 on the game's list.
+    from sts2rl import sim
+    from sts2rl.agent import Agent, AgentConfig
+    from sts2rl.bridge import cli
+
+    agent = Agent(None, AgentConfig(combat_sims=8, samples=1, record=False), seed=0)
+    with sim.Run.new("EVAL000003") as run:
+        run.step(2)
+        assert run.phase == cli.PHASE_TRANSFORM_SELECT
+        payload = live.card_select_payload(agent, run, _selection_screen(run))
+    assert payload == [
+        {"action": "select_card", "index": 0},
+        {"action": "select_card", "index": 1},
+        {"action": "confirm_selection"},
+    ]
+
+
+def test_a_selection_the_game_lists_differently_is_a_divergence():
+    from sts2rl import sim
+    from sts2rl.agent import Agent, AgentConfig
+
+    agent = Agent(None, AgentConfig(combat_sims=8, samples=1, record=False), seed=0)
+    with sim.Run.new("EVAL000003") as run:
+        run.step(2)
+        screen = _selection_screen(run)
+        screen["card_select"]["cards"].pop()  # the game offers one card fewer
+        with pytest.raises(live.Diverged):
+            live.card_select_payload(agent, run, screen)
