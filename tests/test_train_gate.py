@@ -170,3 +170,22 @@ def test_an_interrupted_promotion_test_is_finished_on_resume(world):
     rows = [json.loads(l) for l in (world.dir / "metrics.jsonl").read_text().splitlines()]
     assert any(r.get("resumed_gate") and r["gate"]["promoted"] for r in rows)
     assert champion(world)["iteration"] == 0
+
+
+def test_training_goes_back_to_the_champion_after_iterations_without_a_promotion(world):
+    world.dir.mkdir(parents=True)
+    (world.dir / "latest.pt").write_text(json.dumps({"q": 0.3, "meta": {"iteration": 8}}))
+    world.schedule = [0.2, 0.15, 0.1]  # drifting below the champion
+    train("--iterations", "3")
+    assert quality(world.dir / "latest.pt") == 0.3
+    rows = [json.loads(l) for l in (world.dir / "metrics.jsonl").read_text().splitlines()]
+    assert [r.get("reverted_to_champion") for r in rows if r["iter"] >= 0] == [None, None, 8]
+    assert world.selfplay == ["best.pt"] * 3  # the champion plays self-play by default
+
+
+def test_revert_after_zero_keeps_training_the_drifting_network(world):
+    world.dir.mkdir(parents=True)
+    (world.dir / "latest.pt").write_text(json.dumps({"q": 0.3, "meta": {"iteration": 8}}))
+    world.schedule = [0.2, 0.15, 0.1]
+    train("--iterations", "3", "--revert-after", "0")
+    assert quality(world.dir / "latest.pt") == 0.1

@@ -164,14 +164,17 @@ it (see `models/README.md`) instead of starting over.
 python -m sts2rl.train --name main --workers $(nproc) --iterations 200
 ```
 
-Each iteration plays `--runs-per-iter` self-play runs, trains, then evaluates on the
-**validation** seeds and puts the new checkpoint up against the current champion on those
+Each iteration has the champion play `--runs-per-iter` self-play runs, trains the network
+on them, then evaluates it on the **validation** seeds and puts the new checkpoint up against the current champion on those
 same seeds. It replaces the champion (`best.pt`) only if its run score is higher with
 p < 0.05 (paired sign-flip permutation test over seeds) *and* it shows no significant
 drop in Act 1 clears or wins (exact McNemar). A checkpoint that is merely not worse stays
 out — that is how noise becomes "the best checkpoint". Each test stands on its own, so over
 a long run an occasional false promotion is still expected: confirm a final champion on
-the test split. The first champion is the checkpoint the run starts from (`best.pt`, or a
+the test split. After `--revert-after` iterations in a row without a promotion (3), the
+network in training goes back to the champion's weights. Without that, and with the newest
+network playing its own self-play games, a run drifted: from a champion with 83 of 128
+validation Act 1 clears, eleven iterations later its network cleared 55. The first champion is the checkpoint the run starts from (`best.pt`, or a
 `latest.pt` you put there to continue from), else the untrained heuristic. Everything goes
 to `runs/main/` (`metrics.jsonl`, `latest.pt`, `best.pt`, `champion.json`, data shards).
 Stop it any time; the same command resumes — the champion's cached results are reused

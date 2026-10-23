@@ -3,13 +3,19 @@
     python -m sts2rl.train --name main --iterations 50 --workers 8
 
 Each iteration:
-  1. self-play `--runs-per-iter` runs with the current value net (plus exploration)
+  1. self-play `--runs-per-iter` runs with the champion (plus exploration)
   2. append them to the replay buffer (one compressed shard per iteration)
   3. train the value net on the last `--replay-iters` shards, TD(lambda) targets
   4. evaluate greedily on the validation seeds and run a paired test against the current
      champion on those same seeds; the candidate becomes champion (best.pt) only if its
      score gain is statistically significant and it has no significant drop in Act 1
      clears or wins
+  5. after `--revert-after` iterations in a row without a promotion, the network in
+     training goes back to the champion's weights
+
+Steps 1 and 5 keep a network that has drifted below the champion from feeding on its
+own worse games: a run that self-played with its newest network and never looked back
+lost 28 of 83 validation Act 1 clears over eleven iterations.
 
 The first champion is the checkpoint the run starts from (an existing best.pt, or a
 latest.pt put there to continue from), else the untrained heuristic. Everything lands in
@@ -119,8 +125,10 @@ def main() -> None:
     ap.add_argument("--replay-iters", type=int, default=8)
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--gate-alpha", type=float, default=0.05, help="significance level a new champion must reach")
-    ap.add_argument("--selfplay-model", choices=["latest", "champion"], default="latest",
+    ap.add_argument("--selfplay-model", choices=["latest", "champion"], default="champion",
                     help="which agent plays self-play games: the newest network, or the current champion")
+    ap.add_argument("--revert-after", type=int, default=3,
+                    help="iterations in a row without a promotion before training restarts from the champion (0: never)")
     args = ap.parse_args()
 
     out = paths.RUNS_DIR / args.name
@@ -201,6 +209,7 @@ def main() -> None:
             append_jsonl(metrics_path, row)
             print(line, flush=True)
 
+        unpromoted = 0
         for it in range(start, start + args.iterations):
             t0 = time.perf_counter()
             if args.selfplay_model == "champion":
@@ -228,6 +237,13 @@ def main() -> None:
             )
             if (it + 1) % args.eval_every == 0:
                 line += gate(it, row)
+                unpromoted = 0 if row["gate"]["promoted"] else unpromoted + 1
+                if args.revert_after and unpromoted >= args.revert_after and champion["model"] != "heuristic":
+                    model = ValueNet.load(best)
+                    model.save(latest, iteration=it, args=vars(args))
+                    row["reverted_to_champion"] = champion["iteration"]
+                    line += f"\n           {unpromoted} without a promotion: training goes back to the champion (iter {champion['iteration']})"
+                    unpromoted = 0
             append_jsonl(metrics_path, row)
             print(line, flush=True)
 
