@@ -28,7 +28,11 @@ PY="$ROOT/.venv/bin/python"
 say() { printf '\n==> %s\n' "$*"; }
 
 say "1/5  this repo"
-if [ -x "$PY" ] && "$PY" -c "import sts2rl.sim" 2>/dev/null; then
+# A `git pull` can bring new simulator patches: setup.sh stamps the build with the patch
+# set it was built from, and a different set means apply them and rebuild.
+stamp="$(cat "$ROOT"/patches/sts2/*.patch | git hash-object --stdin)"
+built="$(cat "$ROOT/third_party/sts2/out/patches.stamp" 2>/dev/null || true)"
+if [ "$built" = "$stamp" ] && [ -x "$PY" ] && "$PY" -c "import sts2rl.sim" 2>/dev/null; then
   echo "    already set up"
 else
   # What a fresh Ubuntu (the WSL default) lacks: .NET needs ICU, the simulator's

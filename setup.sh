@@ -54,6 +54,8 @@ dotnet --version
 echo "==> native simulator build"
 # NativeAOT needs a C toolchain: clang + zlib on Linux, Xcode CLT on macOS.
 bash "$SIM/scripts/build.sh"
+# Which patch set this build has (scripts/play_real_game.sh rebuilds when it changes).
+cat "$ROOT"/patches/sts2/*.patch | git hash-object --stdin > "$SIM/out/patches.stamp"
 
 echo "==> python environment"
 PY="${PYTHON:-python3}"
