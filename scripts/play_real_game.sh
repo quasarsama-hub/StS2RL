@@ -31,14 +31,15 @@ say "1/5  this repo"
 if [ -x "$PY" ] && "$PY" -c "import sts2rl.sim" 2>/dev/null; then
   echo "    already set up"
 else
-  # What a fresh Ubuntu (the WSL default) lacks: the simulator's NativeAOT build needs
-  # clang and zlib, and Python needs its venv module.
+  # What a fresh Ubuntu (the WSL default) lacks: .NET needs ICU, the simulator's
+  # NativeAOT build needs clang and zlib, and Python needs its venv module.
   if command -v apt-get >/dev/null 2>&1; then
     need=()
     command -v git >/dev/null 2>&1 || need+=(git)
     command -v curl >/dev/null 2>&1 || need+=(curl)
     command -v clang >/dev/null 2>&1 || need+=(clang)
     dpkg -s zlib1g-dev >/dev/null 2>&1 || need+=(zlib1g-dev)
+    ldconfig -p 2>/dev/null | grep -q libicuuc || need+=(libicu-dev)
     python3 -c "import ensurepip" >/dev/null 2>&1 || need+=(python3-venv)
     if [ "${#need[@]}" -gt 0 ]; then
       echo "    installing ${need[*]} (sudo may ask for your password)"
