@@ -1,0 +1,3 @@
+score 0.212  win 0.0% [0.0%,2.9%]  act1:70%  act2:3%  act3:0%  floor 21.6  (128 runs, 4.2s/run)
+most common deaths: {'slumbering-beetle': 13, 'spiny-toad': 10, 'bowlbugs': 9, 'vantom': 7, 'mytes': 7, 'ceremonial-beast': 7, 'louse-progenitor': 6, 'obscura': 6}
+wall time 140s

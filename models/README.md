@@ -1,12 +1,12 @@
 # Trained checkpoints
 
-`best.pt` is the value network from the development training run (`runs/main`), selected
-by evaluation score on validation seeds `EVAL000000–000063` and then measured on held-out
-test seeds `EVAL001000+` (see `best.json`). It was trained before simulator patch 0006
-gave treasure chests their relic, and while the agent could still walk away from events
-(which the game does not allow); `best.json` → `results_patch0006` re-measures it with
-both fixed and simulator patches 0001–0015. It is a starting point, not a finished agent:
-continue training from it with
+`best.pt` is the value network from the development training run (`runs/main`, iteration
+8), fine-tuned for one iteration (`runs/v2`, 400 self-play runs) on the simulator with
+patches 0001–0015. It replaced the `runs/main` network in the paired test on validation
+seeds `EVAL000000–000127` and then on held-out test seeds `EVAL001000+`: Act 1 cleared on
+89 of 128 test seeds to 72, at 48 sims and 2 samples (see `best.json`; with 3 samples, 79
+to 72). `best.json` → `previous_checkpoint` keeps the old network's numbers. It is a
+starting point, not a finished agent: continue training from it with
 
 ```bash
 mkdir -p runs/main && cp models/best.pt runs/main/latest.pt

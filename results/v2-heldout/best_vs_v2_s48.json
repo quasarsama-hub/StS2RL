@@ -1,0 +1,90 @@
+{
+ "split": "test",
+ "a": "models/best.pt",
+ "b": "results/v2-test/candidate.pt",
+ "summary_a": {
+  "runs": 128,
+  "errors": 0,
+  "score": 0.19753370098039216,
+  "win_rate": 0.0,
+  "win_ci95": [
+   0.0,
+   0.02913799589810803
+  ],
+  "mean_floor": 20.1484375,
+  "seconds_per_run": 3.4631145414374984,
+  "act1_clear": 0.5625,
+  "act2_clear": 0.015625,
+  "act3_clear": 0.0,
+  "deaths": {
+   "slumbering-beetle": 13,
+   "vantom": 12,
+   "lagavulin-matriarch": 10,
+   "spiny-toad": 9,
+   "hunter-killer": 7,
+   "kin": 7,
+   "ovicopter": 6,
+   "bowlbugs": 5
+  }
+ },
+ "summary_b": {
+  "runs": 128,
+  "errors": 0,
+  "score": 0.21170343137254902,
+  "win_rate": 0.0,
+  "win_ci95": [
+   0.0,
+   0.02913799589810803
+  ],
+  "mean_floor": 21.59375,
+  "seconds_per_run": 3.7951005095547075,
+  "act1_clear": 0.6953125,
+  "act2_clear": 0.03125,
+  "act3_clear": 0.0,
+  "deaths": {
+   "slumbering-beetle": 13,
+   "spiny-toad": 10,
+   "bowlbugs": 9,
+   "vantom": 7,
+   "mytes": 7,
+   "ceremonial-beast": 7,
+   "louse-progenitor": 6,
+   "obscura": 6
+  }
+ },
+ "comparison": {
+  "pairs": 128,
+  "missing": [],
+  "missing_a": [],
+  "missing_b": [],
+  "score_a": 0.1975337009803922,
+  "score_b": 0.21170343137254904,
+  "score_diff": 0.014169730392156864,
+  "score_diff_ci95": [
+   0.00114889705882353,
+   0.02688419117647059
+  ],
+  "score_p_b_better": 0.017099145042747864,
+  "floor_diff": 1.4453125,
+  "floor_diff_ci95": [
+   0.1171875,
+   2.7421875
+  ],
+  "act1_a": 72,
+  "act1_b": 89,
+  "act1_mcnemar": {
+   "discordant": 41,
+   "p_two_sided": 0.011507789735333063,
+   "p_b_better": 0.005753894867666531
+  },
+  "wins_a": 0,
+  "wins_b": 0,
+  "wins_mcnemar": {
+   "discordant": 0,
+   "p_two_sided": 1.0,
+   "p_b_better": 1.0
+  }
+ },
+ "promote": true,
+ "reason": "score +0.0142 (p=0.0171), Act 1 clears 72->89"
+}

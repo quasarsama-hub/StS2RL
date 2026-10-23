@@ -1,0 +1,9 @@
+A: score 0.142  win 0.0% [0.0%,2.9%]  act1:24%  act2:0%  act3:0%  floor 14.5  (128 runs, 2.6s/run)
+B: score 0.212  win 0.0% [0.0%,2.9%]  act1:70%  act2:3%  act3:0%  floor 21.6  (128 runs, 3.8s/run)
+128 paired seeds   A = heuristic   B = results/v2-test/candidate.pt
+  run score     A 0.142   B 0.212   B-A +0.0696 [+0.0551, +0.0846]   p(B>A) = 0.0000
+  floor reached B-A +7.10 [+5.62, +8.63]
+  Act 1 clears  A 31   B 89   (72 seeds differ; exact McNemar two-sided p = 0.0000)
+  wins          A 0   B 0   (two-sided p = 1.0000)
+  promotion gate (alpha 0.05): B WOULD BE PROMOTED -- score +0.0696 (p=0.0000), Act 1 clears 31->89
+wall time 210s on the test split

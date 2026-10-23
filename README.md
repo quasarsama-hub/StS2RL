@@ -83,38 +83,38 @@ cleared" = beat the Act 1 boss. 95% Wilson intervals in brackets.
 
 **Held-out evaluation** — 128 test seeds (`EVAL001000…`), never used for training or for
 picking the checkpoint. Same seeds for every row, so the comparison is paired. Measured
-with simulator patches 0001–0015, and with the agent unable to walk away from an event (a
-move the simulator allows and the game does not; see the sts2-cli section)
-(`results/dev-run/final-eval-patch0006/`):
+with all sixteen simulator patches, 2 samples (clones per option where the outcome is
+random, as the training gate uses), and with the agent unable to walk away from an event
+(a move the simulator allows and the game does not; see the sts2-cli section)
+(`results/v2-heldout/`):
 
 | agent | combat sims / move | run score | Act 1 cleared | Act 2 cleared | mean floor reached |
 |---|---|---|---|---|---|
 | heuristic, no training | 48 | 0.142 | 24% [18–32%] | 0 | 14.5 |
-| **trained** (`models/best.pt`) | 48 | 0.195 | **55% [47–64%]** | 1 run | 19.9 |
-| **trained**, deeper search | 128 | 0.207 | **62% [54–70%]** | 2 runs | 21.1 |
+| **trained** (`models/best.pt`) | 48 | 0.212 | **70% [61–77%]** | 4 runs | 21.6 |
+| **trained**, deeper search | 128 | 0.215 | **68% [59–75%]** | 2 runs | 21.9 |
 
-Paired, at 48 sims: the trained agent clears Act 1 on 71 seeds to the heuristic's 31 (68
-seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.053 [+0.038,
-+0.068]. Training **more than doubled the Act 1 clear rate** after ~1,800 self-play runs
-(about 30 minutes on 4 CPU cores). Deeper search gets further on the same seeds (run score
-+0.012 [+0.002, +0.022], p = 0.01; 1.2 floors) but does not clear Act 1 measurably more
-often (80 vs 71 seeds, 29 differ, p = 0.14). Deaths moved from Act 1 hallway fights
-(Phantasmal Gardeners, Terror Eel, Bygone Effigy, Phrog Parasite) to the Act 1 bosses
-(Vantom, Lagavulin Matriarch), Slumbering Beetle and the early Act 2.
+Paired, at 48 sims: the trained agent clears Act 1 on 89 seeds to the heuristic's 31 (72
+seeds differ, exact McNemar p < 0.001), and its run score is higher by +0.070 [+0.055,
++0.085]. Deeper search does not help it measurably (87 vs 89 seeds, run score +0.003
+[−0.006, +0.012]). The trained agent dies most often to Slumbering Beetle, Spiny Toad,
+Bowlbugs and the Act 1 boss Vantom; the heuristic to Act 1 hallway fights (Phantasmal
+Gardeners, Terror Eel, Bygone Effigy).
 
-The checkpoint was trained *before* patches 0006–0014 and the event fix. The trained rows
-read 44% / 55% with none of them (`results/dev-run/final-eval/`), 52% / 66% with the chest
-relics but the walk-away still allowed (commit 8f987fd), 59% / 56% with rest sites still
-offering Proceed from the start (commit d2235b2), 59% / 67% with every potion still
-drinkable (commit 0cade94) and 56% / 63% before patches 0013–0014 (commit 60afc78); the
-heuristic went 14% → 27% → 26% → 25% → 25% → 25% → 24%. The later fixes change the move
-only at a few rest sites, potions or relic screens, yet most runs play out differently
-after each: every candidate move the agent weighs draws from its random stream, so one
-candidate fewer re-rolls every decision after it. On 128 seeds a single rate is good to
-about ±8 points (95%), so read the history as "chest relics help a lot, the rest is
-noise" rather than to the point. (A measurement in between, commit 068659c, read 55% /
-59% and 30% because of a bug that let the agent walk away from events that build their
-options at run time.)
+**The checkpoint** is the development run's network (`runs/main`, iteration 8) fine-tuned
+for one iteration on the patched simulator (`runs/v2`). It beat its predecessor on the
+validation seeds (Act 1 clears 70 → 83 of 128, run score p = 0.04) and again on these test seeds:
+89 to 72 (41 seeds differ, p = 0.01), run score +0.014 [+0.001, +0.027]. Read that as a
+real but modest gain: with 3 samples instead of 2, which re-rolls every run, the same two
+networks clear 79 and 72 (p = 0.23) with an even run score. Every candidate move the
+agent weighs draws from its random stream, so any change of setting, simulator patch or
+network plays most runs out differently, and on 128 seeds a single rate is good to about
+±8 points (95%). The predecessor's own history shows it: across the patches it read
+44%–59% at 48 sims while the heuristic went 14% → 24%, mostly because treasure chests
+gained their relic (patch 0006) and the rest moved within noise. None of the eleven
+iterations of `runs/v2` after the first beat it on the validation seeds, and from the
+sixth on they cleared Act 1 significantly less often: that run self-played with its newest
+network, which training no longer does (see Train).
 
 **The learning curve** (64 validation seeds, 48 sims, simulator before patch 0006; ±~6
 points of noise per row):

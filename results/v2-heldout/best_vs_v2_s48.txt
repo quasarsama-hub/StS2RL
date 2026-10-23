@@ -1,0 +1,10 @@
+A: score 0.198  win 0.0% [0.0%,2.9%]  act1:56%  act2:2%  act3:0%  floor 20.1  (128 runs, 3.5s/run)
+B: score 0.212  win 0.0% [0.0%,2.9%]  act1:70%  act2:3%  act3:0%  floor 21.6  (128 runs, 3.8s/run)
+128 paired seeds   A = models/best.pt   B = results/v2-test/candidate.pt
+  run score     A 0.198   B 0.212   B-A +0.0142 [+0.0011, +0.0269]   p(B>A) = 0.0171
+  floor reached B-A +1.45 [+0.12, +2.74]
+  Act 1 clears  A 72   B 89   (41 seeds differ; exact McNemar two-sided p = 0.0115)
+  wins          A 0   B 0   (two-sided p = 1.0000)
+  promotion gate (alpha 0.05): B WOULD BE PROMOTED -- score +0.0142 (p=0.0171), Act 1 clears 72->89
+wall time 240s on the test split
+exit 0
