@@ -213,3 +213,63 @@ def test_a_selection_the_game_lists_differently_is_a_divergence():
         screen["card_select"]["cards"].pop()  # the game offers one card fewer
         with pytest.raises(live.Diverged):
             live.card_select_payload(agent, run, screen)
+
+
+def _rewards_screen(*types):
+    items = [{"index": i, "type": t} for i, t in enumerate(types)]
+    return {"state_type": "rewards", "rewards": {"items": items, "can_proceed": True}}
+
+
+def test_a_card_reward_the_simulator_dropped_is_left_on_the_games_screen():
+    from sts2rl import sim
+
+    on_screen = {"phase": sim.PHASE_RELIC_REWARD, "pending_rewards": (0, 0, 0, 0)}
+    assert live.rewards_payload(_rewards_screen("card"), on_screen) == {"action": "proceed"}
+    assert live.rewards_payload(_rewards_screen("gold", "card"), on_screen) == {"action": "claim_reward", "index": 0}
+
+    held = {"phase": sim.PHASE_RELIC_REWARD, "pending_rewards": (0, 0, 0, 1)}
+    assert live.rewards_payload(_rewards_screen("card"), held) == {"action": "claim_reward", "index": 0}
+    already_open = {"phase": sim.PHASE_CARD_REWARD, "pending_rewards": (0, 0, 0, 0)}  # Prayer Wheel's second
+    assert live.rewards_payload(_rewards_screen("card"), already_open) == {"action": "claim_reward", "index": 0}
+
+
+# Live run RNL2Z10QLE as the bridge played it, up to the agent skipping floor 3's card
+# reward. The game kept the reward on its screen and the bridge opened it again.
+RNL2Z10QLE = [
+    ("choose_event_option", 2), ("choose_event_option", 0), ("choose_map_node", 3),
+    ("play", 0), ("play", 1, "CORPSE_SLUG_0"), ("end_turn",),
+    ("play", 0, "CORPSE_SLUG_0"), ("play", 0), ("play", 0), ("end_turn",),
+    ("play", 0, "CORPSE_SLUG_0"), ("play", 0, "CORPSE_SLUG_0"), ("play", 1, "CORPSE_SLUG_0"), ("end_turn",),
+    ("play", 0, "CORPSE_SLUG_0"), ("play", 0), ("play", 1), ("end_turn",),
+    ("play", 0, "CORPSE_SLUG_0"), ("play", 1, "CORPSE_SLUG_0"),
+    ("claim_reward", 0), ("claim_reward", 0), ("select_card_reward", 0), ("proceed",), ("choose_map_node", 0),
+    ("play", 4, "SLUDGE_SPINNER_0"), ("play", 1, "SLUDGE_SPINNER_0"), ("end_turn",),
+    ("play", 0, "SLUDGE_SPINNER_0"), ("play", 1, "SLUDGE_SPINNER_0"), ("play", 2, "SLUDGE_SPINNER_0"), ("end_turn",),
+    ("play", 3, "SLUDGE_SPINNER_0"), ("claim_reward", 0), ("claim_reward", 0), ("claim_reward", 0),
+    ("skip_card_reward",),
+]
+
+
+def test_a_skipped_card_reward_stays_skipped_on_a_live_run():
+    from sts2rl import sim
+
+    shadow = live.ShadowSim("RNL2Z10QLE")
+    try:
+        for move in RNL2Z10QLE:
+            name, *args = move
+            payload = {"action": "play_card" if name == "play" else name}
+            if name in ("choose_event_option", "choose_map_node", "claim_reward"):
+                payload["index"] = args[0]
+            elif name in ("play", "select_card_reward"):
+                payload["card_index"] = args[0]
+            if len(args) > 1:
+                payload["target"] = args[1]
+            enemies = [{"entity_id": "SLUDGE_SPINNER_0" if shadow.info["floor"] == 3 else "CORPSE_SLUG_0", "hp": 1}]
+            shadow.apply(payload, {"battle": {"enemies": enemies}} if shadow.phase == sim.PHASE_COMBAT else {})
+        assert shadow.phase == sim.PHASE_RELIC_REWARD  # the simulator's screen, card reward gone
+        # The game is back on its rewards screen, the card reward still listed.
+        assert live.rewards_payload(_rewards_screen("card"), shadow.info) == {"action": "proceed"}
+        shadow.apply({"action": "proceed"}, {})
+        assert shadow.phase == sim.PHASE_MAP and shadow.info["floor"] == 3
+    finally:
+        shadow.close()

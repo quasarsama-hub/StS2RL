@@ -225,6 +225,24 @@ def map_payload(action: int, view: sim.Run, state: dict) -> list[dict]:
     raise NoMapping(f"map choice {action} at {want} is not offered by the game")
 
 
+def rewards_payload(state: dict, info: dict) -> dict:
+    """The next claim on a rewards screen, or proceed.
+
+    Claiming is not a decision, with one catch: skipping a card reward only closes its
+    cards in the game, and the reward stays on the screen, where the simulator has dropped
+    it. So a card reward is opened only while the simulator still holds one, on its
+    rewards screen or already open (Prayer Wheel's second); otherwise the agent's skip would
+    be undone.
+    """
+    pending = info.get("pending_rewards") or ()
+    held = int(info["phase"]) == sim.PHASE_CARD_REWARD or (len(pending) > 3 and int(pending[3]))
+    if not held:
+        rewards = state.get("rewards") or {}
+        items = [i for i in rewards.get("items") or [] if not (isinstance(i, dict) and i.get("type") == "card")]
+        state = {**state, "rewards": {**rewards, "items": items}}
+    return trg.choose_reward_action(state)
+
+
 def card_reward_payload(action: int, view: sim.Run, state: dict) -> list[dict]:
     from sts2_gym.run_constants import REWARD_SKIP_ACTION
 
@@ -396,7 +414,7 @@ class Session:
         if self.desynced:
             return [trg.choose_action(state, 0)] if trg.choose_action(state, 0) else []
         if st == "rewards":
-            return [trg.choose_reward_action(state)]  # claiming is not a decision
+            return [rewards_payload(state, self.shadow.info)]
         if st == "treasure":
             relics = (state.get("treasure") or {}).get("relics") or []
             return [{"action": "claim_treasure_relic", "index": 0}] if relics else [{"action": "proceed"}]
@@ -411,6 +429,10 @@ class Session:
                 return combat_payload(action, target, view, state)
             if st == "card_select":
                 return card_select_payload(self.agent, view, state)
+            if st == "card_reward" and view.phase != sim.PHASE_CARD_REWARD:
+                # Cards the simulator is not offering: taking one would put a card in the
+                # game's deck only, so leave them.
+                raise NoMapping("the simulator has no card reward open")
             action, _ = self.agent.act(view)
             if st == "map":
                 return map_payload(action, view, state)
@@ -431,6 +453,10 @@ class Session:
             return []
         except NoMapping as exc:
             self.log(event="no_mapping", state_type=st, reason=str(exc))
+            if st == "card_reward":
+                # Skipping keeps the deck as the simulator has it; a scripted pick does not.
+                print(f"  ! could not express the agent's move on this screen ({exc}); skipping the cards")
+                return [{"action": "skip_card_reward"}]
             print(f"  ! could not express the agent's move on this screen ({exc}); using scripted play")
             fallback = trg.choose_action(state, 0)
             return [fallback] if fallback else []
