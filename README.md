@@ -220,6 +220,21 @@ python -m sts2rl.bench    --sims 0,32,100                               # combat
 
 ## Playing the real game
 
+**The short way.** On Windows, in WSL2 (Ubuntu); on Linux or macOS, in a terminal:
+
+```bash
+git clone --recurse-submodules https://github.com/quasarsama-hub/StS2RL && cd StS2RL
+bash scripts/play_real_game.sh
+```
+
+It sets the repo up, installs the STS2MCP mod into the game, turns on the WSL networking
+the bridge needs (then asks you to run `wsl --shutdown` once and start it again), waits
+for the game and for you to start an **Ironclad, Ascension 8** run, and hands that run to
+the agent. Back up your save first, and keep Ascension 8 unlocked: it is the only level
+the simulator models. When it stops, it prints the path of the run's log
+(`runs/live/<seed>.jsonl`); if it stopped on a desync, that file names the exact
+difference to fix. The rest of this section is what the script does, by hand.
+
 The bridge (`sts2rl/bridge/live.py`) drives the game through
 [STS2MCP](https://github.com/Gennadiyev/STS2MCP), a mod that exposes the game over a local
 HTTP API. The simulator runs as a **shadow** of the real run: same seed, same character,
