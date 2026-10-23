@@ -1,0 +1,206 @@
+diff --git a/src/Sts2Emulator.Tests/Relics/SilkenTressTests.cs b/src/Sts2Emulator.Tests/Relics/SilkenTressTests.cs
+new file mode 100644
+index 0000000..9c10392
+--- /dev/null
++++ b/src/Sts2Emulator.Tests/Relics/SilkenTressTests.cs
+@@ -0,0 +1,72 @@
++using System.Linq;
++using Sts2Emulator.Core;
++using Sts2Emulator.Core.Run;
++using Xunit;
++
++namespace Sts2Emulator.Tests;
++
++/// <summary>
++/// Silken Tress: "Upon pickup, lose all Gold. Enchant all cards in the first card reward
++/// with Glam." Only the gold half was there, so a live run's Glam card played twice where
++/// the simulator played it once.
++/// </summary>
++public class SilkenTressTests
++{
++    private static void Step(RunEngine engine, int action) =>
++        Assert.Equal(0, engine.Step(action, -1, out _, out _, out _));
++
++    private static RunEngine TakeSilkenTress()
++    {
++        var engine = new RunEngine();
++        engine.Reset("GG0GRYBVJB");
++        engine.State.Phase = RunPhase.Ancient;
++        engine.State.NeowOptions[0] = RunConstants.RelicSilkenTress;
++        Step(engine, 0);
++        Assert.Equal(0, engine.State.Gold);
++        return engine;
++    }
++
++    private static CardInstance Pick(RunEngine engine, int option)
++    {
++        RunRewardGenerator.EnterCardReward(engine.State);
++        int deck = engine.State.Deck.Count;
++        Step(engine, option);
++        Assert.Equal(deck + 1, engine.State.Deck.Count);
++        return engine.State.Deck[^1];
++    }
++
++    [Fact]
++    public void TheFirstCardRewardIsGlamAndTheNextIsNot()
++    {
++        var engine = TakeSilkenTress();
++
++        var first = Pick(engine, 0);
++        Assert.Equal(Enchantment.Glam, first.Enchantment);
++        Assert.Equal(1, first.EnchantAmount);
++
++        var second = Pick(engine, 0);
++        Assert.Equal(Enchantment.None, second.Enchantment);
++    }
++
++    /// <summary>Every option on that screen is Glam, not one of them.</summary>
++    [Fact]
++    public void EveryOptionOnTheFirstScreenIsGlam()
++    {
++        for (int option = 0; option < 3; option++)
++        {
++            var engine = TakeSilkenTress();
++            Assert.Equal(Enchantment.Glam, Pick(engine, option).Enchantment);
++        }
++    }
++
++    /// <summary>Skipping the first card reward spends the charge all the same.</summary>
++    [Fact]
++    public void ASkippedFirstRewardStillSpendsIt()
++    {
++        var engine = TakeSilkenTress();
++        RunRewardGenerator.EnterCardReward(engine.State);
++        Step(engine, RunConstants.RewardSkipAction);
++
++        Assert.Equal(Enchantment.None, Pick(engine, 0).Enchantment);
++    }
++}
+diff --git a/src/Sts2Emulator/Core/Effects/RelicEffects.cs b/src/Sts2Emulator/Core/Effects/RelicEffects.cs
+index f3764b3..4630487 100644
+--- a/src/Sts2Emulator/Core/Effects/RelicEffects.cs
++++ b/src/Sts2Emulator/Core/Effects/RelicEffects.cs
+@@ -374,10 +374,11 @@ public static class RelicEffects
+     /// <summary>
+     /// `Glitter.TryModifyCardRewardOptionsLate`: every card reward the Glam enchantment can
+     /// take gets it, at amount 1. Not one option chosen off a stream like Wing Charm's --
+-    /// ALL of them, which is why this is asked per-card and draws nothing.
++    /// ALL of them, which is why this is asked per-card and draws nothing. Silken Tress does
++    /// the same to one screen, the first card reward after it is taken.
+     /// </summary>
+     public static Enchantment GlitterEnchantmentFor(Run.RunState state, CardInstance card) =>
+-        state.Relics.Any(relic => relic.DefId == Glitter)
++        (state.RewardGlam || state.Relics.Any(relic => relic.DefId == Glitter))
+         && Enchantments.CanEnchant(card, Enchantment.Glam)
+             ? Enchantment.Glam
+             : Enchantment.None;
+diff --git a/src/Sts2Emulator/Core/Run/RunEngine.cs b/src/Sts2Emulator/Core/Run/RunEngine.cs
+index 39222a6..1d547cf 100644
+--- a/src/Sts2Emulator/Core/Run/RunEngine.cs
++++ b/src/Sts2Emulator/Core/Run/RunEngine.cs
+@@ -1888,6 +1888,7 @@ public sealed class RunEngine
+ 
+         Array.Clear(State.RewardCards);
+         Array.Clear(State.RewardUpgraded);
++        State.RewardGlam = false;
+         State.LastingCandyRewardCard = 0;
+         State.LastingCandyRewardUpgraded = false;
+         State.CardRewardRerollAvailable = false;
+diff --git a/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs b/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
+index 2794605..d3787b6 100644
+--- a/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
++++ b/src/Sts2Emulator/Core/Run/RunNonCombatEffects.cs
+@@ -972,6 +972,8 @@ public static class RunNonCombatEffects
+                     ? RunFollowUp.TransformSelect
+                     : RunFollowUp.None;
+             case RunConstants.RelicSilkenTress:
++                // Its Glam half is the charge StartingRelicCounter gives it, spent by the
++                // next card reward populated (RunState.RewardGlam).
+                 state.Gold = 0;
+                 break;
+             case RunConstants.RelicPandorasBox:
+@@ -1258,6 +1260,8 @@ public static class RunNonCombatEffects
+         return relicId switch
+         {
+             RunConstants.RelicSilverCrucible => 3,
++            // One charge: the first card reward after pickup, picked from or not.
++            RunConstants.RelicSilkenTress => 1,
+             Effects.RelicEffects.BoneTea => Effects.RelicEffects.BoneTeaCombats,
+             Effects.RelicEffects.EmberTea => Effects.RelicEffects.EmberTeaCombats,
+             Effects.RelicEffects.TeaOfDiscourtesy => Effects.RelicEffects.TeaOfDiscourtesyCombats,
+diff --git a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+index 13af6cd..c41a3ae 100644
+--- a/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
++++ b/src/Sts2Emulator/Core/Run/RunRewardGenerator.cs
+@@ -373,6 +373,7 @@ public static class RunRewardGenerator
+     public static void EnterOtherCharacterCardReward(RunState state)
+     {
+         state.Phase = RunPhase.CardReward;
++        state.RewardGlam = false;
+         Array.Clear(state.RewardCards);
+         Array.Clear(state.RewardUpgraded);
+         if (state.OtherCharacterOffers.Count > 0)
+@@ -645,6 +646,7 @@ public static class RunRewardGenerator
+         state.PendingCardOffers.Clear();
+         state.HeldRewardCards = [];
+         state.HeldRewardUpgraded = [];
++        state.RewardGlam = false;
+         // Lasting Candy's option belongs to the card reward it was rolled for.
+         state.LastingCandyRewardCard = 0;
+         state.LastingCandyRewardUpgraded = false;
+@@ -912,7 +914,9 @@ public static class RunRewardGenerator
+         Array.Clear(state.RewardUpgraded);
+         state.LastingCandyRewardCard = 0;
+         state.LastingCandyRewardUpgraded = false;
+-        bool silverCrucibleUpgrade = ConsumeSilverCrucibleCardRewardUpgrade(state);
++        bool silverCrucibleUpgrade = ConsumeRelicCharge(state, RunConstants.RelicSilverCrucible);
++        // A Driftwood reroll is not a new reward, but the charge is already spent on it.
++        state.RewardGlam = ConsumeRelicCharge(state, RunConstants.RelicSilkenTress);
+         // `LavaLamp.TryModifyCardRewardOptionsLate` upgrades every upgradable option after
+         // a combat that landed no unblocked damage. Read once, like Silver Crucible's, so
+         // one condition decides the whole screen.
+@@ -1066,11 +1070,10 @@ public static class RunRewardGenerator
+         state.RewardEnchantment = Enchantment.Swift;
+     }
+ 
+-    private static bool ConsumeSilverCrucibleCardRewardUpgrade(RunState state)
++    /// <summary>Spends one of a relic's charges (its Counter); false when it has none left.</summary>
++    private static bool ConsumeRelicCharge(RunState state, int relicId)
+     {
+-        int index = state.Relics.FindIndex(relic =>
+-            relic.DefId == RunConstants.RelicSilverCrucible && relic.Counter > 0
+-        );
++        int index = state.Relics.FindIndex(relic => relic.DefId == relicId && relic.Counter > 0);
+         if (index < 0)
+         {
+             return false;
+diff --git a/src/Sts2Emulator/Core/Run/RunState.cs b/src/Sts2Emulator/Core/Run/RunState.cs
+index abed7de..3d77f21 100644
+--- a/src/Sts2Emulator/Core/Run/RunState.cs
++++ b/src/Sts2Emulator/Core/Run/RunState.cs
+@@ -246,6 +246,13 @@ public sealed class RunState
+ 
+     /// <inheritdoc cref="RewardEnchantIndex" />
+     public Enchantment RewardEnchantment;
++
++    /// <summary>
++    /// Silken Tress: "Enchant all cards in the first card reward with Glam." True while the
++    /// screen its one charge was spent on is up, so every option on it is Glam, as
++    /// Glitter's are on every screen.
++    /// </summary>
++    public bool RewardGlam;
+     public int CurrentNodeType;
+     public int[] NeowOptions = new int[3];
+ 
+diff --git a/src/Sts2Emulator/Core/StateCloning.cs b/src/Sts2Emulator/Core/StateCloning.cs
+index b3a4d50..6934a08 100644
+--- a/src/Sts2Emulator/Core/StateCloning.cs
++++ b/src/Sts2Emulator/Core/StateCloning.cs
+@@ -349,6 +349,7 @@ public static class StateCloning
+             TookUnblockedDamageThisCombat = state.TookUnblockedDamageThisCombat,
+             RewardEnchantIndex = state.RewardEnchantIndex,
+             RewardEnchantment = state.RewardEnchantment,
++            RewardGlam = state.RewardGlam,
+             PendingBonusRelicRewards = [.. state.PendingBonusRelicRewards],
+             WaxRelics = [.. state.WaxRelics],
+             FurCoatRooms = [.. state.FurCoatRooms],
